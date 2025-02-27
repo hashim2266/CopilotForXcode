@@ -4,22 +4,43 @@ struct SettingsLink: View {
     let url: URL
     let title: String
     let subtitle: String?
+    let badge: BadgeItem?
 
-    init(_ url: URL, title: String, subtitle: String? = nil) {
+    init(
+        _ url: URL,
+        title: String,
+        subtitle: String? = nil,
+        badge: BadgeItem? = nil
+    ) {
         self.url = url
         self.title = title
         self.subtitle = subtitle
+        self.badge = badge
     }
 
-    init(url: String, title: String, subtitle: String? = nil) {
-        self.init(URL(string: url)!, title: title, subtitle: subtitle)
+    init(
+        url: String,
+        title: String,
+        subtitle: String? = nil,
+        badge: BadgeItem? = nil
+    ) {
+        self.init(
+            URL(string: url)!,
+            title: title,
+            subtitle: subtitle,
+            badge: badge
+        )
     }
 
     var body: some View {
         Link(destination: url) {
             VStack(alignment: .leading) {
-                Text(title)
-                    .font(.body)
+                HStack{
+                    Text(title).font(.body)
+                    if let badge = self.badge {
+                        Badge(badgeItem: badge)
+                    }
+                }
                 if let subtitle = subtitle {
                     Text(subtitle)
                         .font(.footnote)
@@ -37,6 +58,7 @@ struct SettingsLink: View {
     SettingsLink(
         url: "https://example.com",
         title: "Example",
-        subtitle: "This is an example"
+        subtitle: "This is an example",
+        badge: .init(text: "Not Granted", level: .danger)
     )
 }

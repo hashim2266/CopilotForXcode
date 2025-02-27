@@ -29,7 +29,12 @@ struct GeneralSettingsView: View {
             SettingsLink(
                 url: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility",
                 title: "Accessibility Permission",
-                subtitle: accessibilityPermissionSubtitle
+                subtitle: accessibilityPermissionSubtitle,
+                badge: store.isAccessibilityPermissionGranted == .notGranted ?
+                    .init(
+                        text: "Not Granted",
+                        level: .danger
+                    ) : nil
             )
             Divider()
             SettingsLink(
