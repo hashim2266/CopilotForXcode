@@ -6,6 +6,7 @@ import SharedUIComponents
 import SwiftUI
 import Status
 import Cache
+import ChatTab
 
 struct UserMessage: View {
     var r: Double { messageBubbleCornerRadius }
@@ -54,29 +55,32 @@ struct UserMessage: View {
     }
 }
 
-#Preview {
-    UserMessage(
-        id: "A",
-        text: #"""
-        Please buy me a coffee!
-        | Coffee | Milk |
-        |--------|------|
-        | Espresso | No |
-        | Latte | Yes |
-        ```swift
-        func foo() {}
-        ```
-        ```objectivec
-        - (void)bar {}
-        ```
-        """#,
-        chat: .init(
-            initialState: .init(history: [] as [DisplayedChatMessage], isReceivingMessage: false),
-            reducer: { Chat(service: ChatService.service()) }
+struct UserMessage_Previews: PreviewProvider {
+    static var previews: some View {
+        let chatTabInfo = ChatTabInfo(id: "id", workspacePath: "path", username: "name")
+        UserMessage(
+            id: "A",
+            text: #"""
+            Please buy me a coffee!
+            | Coffee | Milk |
+            |--------|------|
+            | Espresso | No |
+            | Latte | Yes |
+            ```swift
+            func foo() {}
+            ```
+            ```objectivec
+            - (void)bar {}
+            ```
+            """#,
+            chat: .init(
+                initialState: .init(history: [] as [DisplayedChatMessage], isReceivingMessage: false),
+                reducer: { Chat(service: ChatService.service(for: chatTabInfo)) }
+            )
         )
-    )
-    .padding()
-    .fixedSize(horizontal: true, vertical: true)
-    .background(Color.yellow)
+        .padding()
+        .fixedSize(horizontal: true, vertical: true)
+        .background(Color.yellow)
+        
+    }
 }
-

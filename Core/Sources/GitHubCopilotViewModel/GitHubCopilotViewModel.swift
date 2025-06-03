@@ -106,7 +106,7 @@ public class GitHubCopilotViewModel: ObservableObject {
                 let service = try getGitHubCopilotAuthService()
                 status = try await service.signOut()
                 await Status.shared.updateAuthStatus(.notLoggedIn)
-                await Status.shared.updateCLSStatus(.unknown, message: "")
+                await Status.shared.updateCLSStatus(.unknown, busy: false, message: "")
                 username = ""
                 broadcastStatusChange()
             } catch {
@@ -157,6 +157,10 @@ public class GitHubCopilotViewModel: ObservableObject {
                 self.status = status
                 await Status.shared.updateAuthStatus(.loggedIn, username: username)
                 broadcastStatusChange()
+                let models = try? await service.models()
+                if let models = models, !models.isEmpty {
+                    CopilotModelManager.updateLLMs(models)
+                }
             } catch let error as GitHubCopilotError {
                 if case .languageServerError(.timeout) = error {
                     // TODO figure out how to extend the default timeout on a Chime LSP request

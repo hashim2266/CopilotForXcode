@@ -4,7 +4,7 @@ import Cache
 @MainActor
 public class StatusObserver: ObservableObject {
     @Published public private(set) var authStatus = AuthStatus(status: .unknown, username: nil, message: nil)
-    @Published public private(set) var clsStatus = CLSStatus(status: .unknown, message: "")
+    @Published public private(set) var clsStatus = CLSStatus(status: .unknown, busy: false, message: "")
     @Published public private(set) var observedAXStatus = ObservedAXStatus.unknown
     
     public static let shared = StatusObserver()

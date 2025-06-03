@@ -6,13 +6,15 @@ public class AccountItemView: NSView {
     private var action: Selector?
     private var isHovered = false
     private var visualEffect: NSVisualEffectView
-    private let menuItemPadding: CGFloat = 3
+    private let menuItemPadding: CGFloat = 6
+    private let topInset: CGFloat = 4  // Customize this value
+    private let bottomInset: CGFloat = 0
 
     private var userName: String
     private var nameLabel: NSTextField!
-    let avatarSize = 36
-    let horizontalPadding = 14
-    let verticalPadding = 8
+    let avatarSize = 28.0
+    let horizontalPadding = 14.0
+    let verticalPadding = 8.0
 
     public override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
@@ -40,7 +42,14 @@ public class AccountItemView: NSView {
         self.visualEffect.isEmphasized = true
 
         // Initialize with a reasonable starting size
-        super.init(frame: NSRect(x: 0, y: 0, width: 240, height: 52))
+        super.init(
+            frame: NSRect(
+                x: 0,
+                y: 0,
+                width: 240,
+                height: avatarSize+verticalPadding+topInset
+            )
+        )
         
         // Set up autoresizing mask to allow the view to resize with its superview
         self.autoresizingMask = [.width]
@@ -58,7 +67,7 @@ public class AccountItemView: NSView {
         let avatarView = NSHostingView(rootView: AvatarView(userName: userName, isHovered: isHovered))
         avatarView.frame = NSRect(
             x: horizontalPadding,
-            y: 8,
+            y: 4,
             width: avatarSize,
             height: avatarSize
         )
@@ -68,12 +77,13 @@ public class AccountItemView: NSView {
         nameLabel = NSTextField(
             labelWithString: userName.isEmpty ? "Sign In to GitHub Account" : userName
         )
-        nameLabel.font = .boldSystemFont(ofSize: NSFont.systemFontSize)
+        nameLabel.font =
+            .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
         nameLabel.frame = NSRect(
-            x: horizontalPadding + horizontalPadding/2 + avatarSize,
-            y: verticalPadding,
+            x: horizontalPadding*1.5 + avatarSize,
+            y: 0,
             width: 180,
-            height: 28
+            height: avatarSize
         )
         nameLabel.cell?.truncatesLastVisibleLine = true
         nameLabel.cell?.lineBreakMode = .byTruncatingTail
@@ -132,10 +142,11 @@ public class AccountItemView: NSView {
     }
 
     private func updateVisualEffectFrame() {
-        let paddedFrame = bounds.insetBy(
-            dx: menuItemPadding*2,
-            dy: menuItemPadding
-        )
+        var paddedFrame = bounds
+        paddedFrame.origin.x += menuItemPadding
+        paddedFrame.origin.y += bottomInset
+        paddedFrame.size.width -= menuItemPadding*2
+        paddedFrame.size.height -= (topInset + bottomInset)
         visualEffect.frame = paddedFrame
     }
 }
@@ -158,7 +169,7 @@ struct AvatarView: View {
                     .scaledToFit()
                     .clipShape(Circle())
             } else if userName.isEmpty {
-                Image(systemName: "person.circle")
+                Image(systemName: "person.crop.circle")
                     .resizable()
                     .scaledToFit()
                     .foregroundStyle(isHovered ? .white : .primary)

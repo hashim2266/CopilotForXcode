@@ -10,12 +10,7 @@ enum ConversationSource: String, Codable {
     case panel, inline
 }
 
-public struct Doc: Codable {
-    var position: Position?
-    var uri: String
-}
-
-public struct Reference: Codable {
+public struct Reference: Codable, Equatable, Hashable {
     public var type: String = "file"
     public let uri: String
     public let position: Position?
@@ -29,12 +24,16 @@ struct ConversationCreateParams: Codable {
     var workDoneToken: String
     var turns: [ConversationTurn]
     var capabilities: Capabilities
-    var doc: Doc?
+    var textDocument: Doc?
     var references: [Reference]?
     var computeSuggestions: Bool?
     var source: ConversationSource?
     var workspaceFolder: String?
+    var workspaceFolders: [WorkspaceFolder]?
     var ignoredSkills: [String]?
+    var model: String?
+    var chatMode: String?
+    var needToolCallConfirmation: Bool?
 
     struct Capabilities: Codable {
         var skills: [String]
@@ -67,6 +66,8 @@ public struct ConversationProgressReport: BaseConversationProgress {
     public let turnId: String
     public let reply: String?
     public let references: [Reference]?
+    public let steps: [ConversationProgressStep]?
+    public let editAgentRounds: [AgentRound]?
 }
 
 public struct ConversationProgressEnd: BaseConversationProgress {
@@ -131,9 +132,14 @@ struct TurnCreateParams: Codable {
     var workDoneToken: String
     var conversationId: String
     var message: String
-    var doc: Doc?
+    var textDocument: Doc?
     var ignoredSkills: [String]?
     var references: [Reference]?
+    var model: String?
+    var workspaceFolder: String?
+    var workspaceFolders: [WorkspaceFolder]?
+    var chatMode: String?
+    var needToolCallConfirmation: Bool?
 }
 
 // MARK: Copy
@@ -159,24 +165,13 @@ public struct ConversationContextParams: Codable {
 
 public typealias ConversationContextRequest = JSONRPCRequest<ConversationContextParams>
 
-// MARK: Conversation template
 
-public struct Template: Codable {
-    public var id: String
-    public var description: String
-    public var shortDescription: String
-    public var scopes: [PromptTemplateScope]
-    
-    public init(id: String, description: String, shortDescription: String, scopes: [PromptTemplateScope]) {
-        self.id = id
-        self.description = description
-        self.shortDescription = shortDescription
-        self.scopes = scopes
-    }
+// MARK: Watched Files
+
+public struct WatchedFilesParams: Codable {
+    public var workspaceFolder: WorkspaceFolder
+    public var excludeGitignoredFiles: Bool
+    public var excludeIDEIgnoredFiles: Bool
 }
 
-public enum PromptTemplateScope: String, Codable {
-    case chatPanel = "chat-panel"
-    case editor = "editor"
-    case inline = "inline"
-}
+public typealias WatchedFilesRequest = JSONRPCRequest<WatchedFilesParams>

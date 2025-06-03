@@ -2,25 +2,38 @@ import CopilotForXcodeKit
 import Foundation
 import ConversationServiceProvider
 import BuiltinExtension
+import Workspace
+import LanguageServerProtocol
 
 public final class GitHubCopilotConversationService: ConversationServiceType {
-    
+
     private let serviceLocator: ServiceLocator
     
     init(serviceLocator: ServiceLocator) {
         self.serviceLocator = serviceLocator
     }
-    
+
+    private func getWorkspaceFolders(workspace: WorkspaceInfo) -> [WorkspaceFolder] {
+        let projects = WorkspaceFile.getProjects(workspace: workspace)
+        return projects.map { project in
+            WorkspaceFolder(uri: project.uri, name: project.name)
+        }
+    }
+
     public func createConversation(_ request: ConversationRequest, workspace: WorkspaceInfo) async throws {
         guard let service = await serviceLocator.getService(from: workspace) else { return }
         
         return try await service.createConversation(request.content,
                                                     workDoneToken: request.workDoneToken,
-                                                    workspaceFolder: request.workspaceFolder,
-                                                    doc: nil,
+                                                    workspaceFolder: workspace.projectURL.absoluteString,
+                                                    workspaceFolders: getWorkspaceFolders(workspace: workspace),
+                                                    activeDoc: request.activeDoc,
                                                     skills: request.skills,
                                                     ignoredSkills: request.ignoredSkills,
-                                                    references: request.references ?? [])
+                                                    references: request.references ?? [],
+                                                    model: request.model,
+                                                    turns: request.turns,
+                                                    agentMode: request.agentMode)
     }
     
     public func createTurn(with conversationId: String, request: ConversationRequest, workspace: WorkspaceInfo) async throws {
@@ -29,9 +42,13 @@ public final class GitHubCopilotConversationService: ConversationServiceType {
         return try await service.createTurn(request.content,
                                             workDoneToken: request.workDoneToken,
                                             conversationId: conversationId,
-                                            doc: nil,
+                                            activeDoc: request.activeDoc,
                                             ignoredSkills: request.ignoredSkills,
-                                            references: request.references ?? [])
+                                            references: request.references ?? [],
+                                            model: request.model,
+                                            workspaceFolder: workspace.projectURL.absoluteString,
+                                            workspaceFolders: getWorkspaceFolders(workspace: workspace),
+                                            agentMode: request.agentMode)
     }
     
     public func cancelProgress(_ workDoneToken: String, workspace: WorkspaceInfo) async throws {
@@ -52,22 +69,25 @@ public final class GitHubCopilotConversationService: ConversationServiceType {
 
     public func templates(workspace: WorkspaceInfo) async throws -> [ChatTemplate]? {
         guard let service = await serviceLocator.getService(from: workspace) else { return nil }
-        return try await service.templates().map { convertTemplateToChatTemplate($0) }
+        return try await service.templates()
     }
 
-    func convertTemplateToChatTemplate(_ template: Template) -> ChatTemplate {
-        ChatTemplate(
-            id: template.id,
-            description: template.description,
-            shortDescription: template.shortDescription,
-            scopes: template.scopes.map { scope in
-                switch scope {
-                case .chatPanel: return .chatPanel
-                case .editor: return .editor
-                case .inline: return .inline
-                }
-            }
-        )
+    public func models(workspace: WorkspaceInfo) async throws -> [CopilotModel]? {
+        guard let service = await serviceLocator.getService(from: workspace) else { return nil }
+        return try await service.models()
+    }
+    
+    public func notifyDidChangeWatchedFiles(_ event: DidChangeWatchedFilesEvent, workspace: WorkspaceInfo) async throws {
+        guard let service = await serviceLocator.getService(from: workspace) else {
+            return
+        }
+        
+        return try await service.notifyDidChangeWatchedFiles(.init(workspaceUri: event.workspaceUri, changes: event.changes))
+    }
+    
+    public func agents(workspace: WorkspaceInfo) async throws -> [ChatAgent]? {
+        guard let service = await serviceLocator.getService(from: workspace) else { return nil }
+        return try await service.agents()
     }
 }
 

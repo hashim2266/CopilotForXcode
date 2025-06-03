@@ -4,14 +4,49 @@ import SwiftUI
 
 /// The information of a tab.
 @ObservableState
-public struct ChatTabInfo: Identifiable, Equatable {
+public struct ChatTabInfo: Identifiable, Equatable, Codable {
     public var id: String
-    public var title: String
+    public var title: String? = nil
+    public var isTitleSet: Bool {
+        if let title = title, !title.isEmpty { return true }
+        return false
+    }
     public var focusTrigger: Int = 0
-
-    public init(id: String, title: String) {
+    public var isSelected: Bool
+    public var CLSConversationID: String?
+    public var createdAt: Date
+    // used in chat history view
+    // should be updated when chat tab info changed or chat message of it changed
+    public var updatedAt: Date
+    
+    // The `workspacePath` and `username` won't be save into database
+    private(set) public var workspacePath: String
+    private(set) public var username: String
+    
+    public init(id: String, title: String? = nil, isSelected: Bool = false, CLSConversationID: String? = nil, workspacePath: String, username: String) {
         self.id = id
         self.title = title
+        self.isSelected = isSelected
+        self.CLSConversationID = CLSConversationID
+        self.workspacePath = workspacePath
+        self.username = username
+        
+        let now = Date.now
+        self.createdAt = now
+        self.updatedAt = now
+    }
+    
+    // for restoring
+    public init(id: String, title: String? = nil, focusTrigger: Int = 0, isSelected: Bool, CLSConversationID: String? = nil, createdAt: Date, updatedAt: Date, workspacePath: String, username: String) {
+        self.id = id
+        self.title = title
+        self.focusTrigger = focusTrigger
+        self.isSelected = isSelected
+        self.CLSConversationID = CLSConversationID
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
+        self.workspacePath = workspacePath
+        self.username = username
     }
 }
 
@@ -78,7 +113,7 @@ open class BaseChatTab {
         
         storeObserver.observe { [weak self] in
             guard let self else { return }
-            self.title = store.title
+            self.title = store.title ?? ""
             self.id = store.id
         }
     }
@@ -241,7 +276,7 @@ public class EmptyChatTab: ChatTab {
 
     public convenience init(id: String) {
         self.init(store: .init(
-            initialState: .init(id: id, title: "Empty-\(id)"),
+            initialState: .init(id: id, title: "Empty-\(id)", workspacePath: "", username: ""),
             reducer: { ChatTabItem() }
         ))
     }

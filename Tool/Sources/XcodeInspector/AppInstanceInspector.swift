@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 public class AppInstanceInspector: ObservableObject {
-    let runningApplication: NSRunningApplication
+    public let runningApplication: NSRunningApplication
     public let processIdentifier: pid_t
     public let bundleURL: URL?
     public let bundleIdentifier: String?
@@ -34,6 +34,10 @@ public class AppInstanceInspector: ObservableObject {
 
     public func activate() -> Bool {
         return runningApplication.activate()
+    }
+    
+    public func activate(options: NSApplication.ActivationOptions) -> Bool {
+        return runningApplication.activate(options: options)
     }
 
     init(runningApplication: NSRunningApplication) {

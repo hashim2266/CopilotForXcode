@@ -66,21 +66,22 @@ struct ChatHistoryView: View {
         @Environment(\.chatTabPool) var chatTabPool
         
         var body: some View {
-            ScrollView {
-                LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(filteredTabInfo, id: \.id) { info in
-                        if let tab = chatTabPool.getTab(of: info.id){
-                            ChatHistoryItemView(
-                                store: store,
-                                info: info,
-                                content: { tab.chatConversationItem },
-                                isChatHistoryVisible: $isChatHistoryVisible
-                            )
-                            .id(info.id)
-                            .frame(height: 49)
-                        }
-                        else {
-                            EmptyView()
+            WithPerceptionTracking {
+                ScrollView {
+                    LazyVStack(alignment: .leading, spacing: 0) {
+                        ForEach(filteredTabInfo, id: \.id) { info in
+                            if let _ = chatTabPool.getTab(of: info.id){
+                                ChatHistoryItemView(
+                                    store: store,
+                                    info: info,
+                                    isChatHistoryVisible: $isChatHistoryVisible
+                                )
+                                .id(info.id)
+                                .frame(height: 61)
+                            }
+                            else {
+                                EmptyView()
+                            }
                         }
                     }
                 }
@@ -91,17 +92,21 @@ struct ChatHistoryView: View {
             guard let tabInfo = store.currentChatWorkspace?.tabInfo else {
                 return []
             }
+            
+            // sort by updatedAt by descending order
+            let sortedTabInfo = tabInfo.sorted { $0.updatedAt > $1.updatedAt }
+            
+            guard !searchText.isEmpty else { return IdentifiedArray(uniqueElements: sortedTabInfo) }
 
-            guard !searchText.isEmpty else { return tabInfo }
-            let result = tabInfo.filter { info in
-                if let tab = chatTabPool.getTab(of: info.id),
-                   let conversationTab = tab as? ConversationTab {
-                    return conversationTab.getChatTabTitle().localizedCaseInsensitiveContains(searchText)
+            let result = sortedTabInfo.filter { info in
+                if let tab = chatTabPool.getTab(of: info.id) {
+                    return tab.title.localizedCaseInsensitiveContains(searchText)
                 }
                 
                 return false
             }
-            return result
+            
+            return IdentifiedArray(uniqueElements: result)
         }
     }
 }
@@ -134,10 +139,9 @@ struct ChatHistorySearchBarView: View {
     }
 }
 
-struct ChatHistoryItemView<Content: View>: View {
+struct ChatHistoryItemView: View {
     let store: StoreOf<ChatPanelFeature>
     let info: ChatTabInfo
-    let content: () -> Content
     @Binding var isChatHistoryVisible: Bool
     @State private var isHovered = false
     
@@ -145,45 +149,69 @@ struct ChatHistoryItemView<Content: View>: View {
         return store.state.currentChatWorkspace?.selectedTabId == info.id
     }
     
+    func formatDate(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.dateFormat = "MMMM d, yyyy, h:mm a"
+        return formatter.string(from: date)
+    }
+    
     var body: some View {
-        VStack(spacing: 0) {
-            HStack(alignment: .center, spacing: 0) {
-                HStack(spacing: 8) {
-                    content()
-                        .font(.system(size: 14, weight: .regular))
-                        .lineLimit(1)
-                        .hoverPrimaryForeground(isHovered: isHovered)
-                    
-                    if isTabSelected() {
-                        Text("Current")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-                
-                Spacer()
-                
-                if !isTabSelected() {
-                    if isHovered {
-                        Button(action: {
-                            store.send(.chatHisotryDeleteButtonClicked(id: info.id))
-                        }) {
-                            Image(systemName: "trash")
+        WithPerceptionTracking {
+            VStack(spacing: 0) {
+                HStack(alignment: .center, spacing: 0) {
+                    VStack(spacing: 4) {
+                        HStack(spacing: 8) {
+                            // Do not use the `ChatConversationItemView` any more
+                            // directly get title from chat tab info
+                            Text(info.title ?? "New Chat")
+                                .frame(alignment: .leading)
+                                .font(.system(size: 14, weight: .regular))
+                                .lineLimit(1)
+                                .hoverPrimaryForeground(isHovered: isHovered)
+                            
+                            if isTabSelected() {
+                                Text("Current")
+                                    .foregroundStyle(.secondary)
+                            }
+                            
+                            Spacer()
                         }
-                        .buttonStyle(HoverButtonStyle())
-                        .help("Delete")
+                        
+                        HStack(spacing: 0) {
+                            Text(formatDate(info.updatedAt))
+                                .frame(alignment: .leading)
+                                .font(.system(size: 13, weight: .thin))
+                                .lineLimit(1)
+                            
+                            Spacer()
+                        }
+                    }
+                    
+                    Spacer()
+                    
+                    if !isTabSelected() {
+                        if isHovered {
+                            Button(action: {
+                                store.send(.chatHisotryDeleteButtonClicked(id: info.id))
+                            }) {
+                                Image(systemName: "trash")
+                            }
+                            .buttonStyle(HoverButtonStyle())
+                            .help("Delete")
+                        }
                     }
                 }
+                .padding(.horizontal, 12)
             }
-            .padding(.horizontal, 12)
-        }
-        .frame(maxHeight: .infinity)
-        .onHover(perform: {
-            isHovered = $0
-        })
-        .hoverRadiusBackground(isHovered: isHovered, cornerRadius: 4)
-        .onTapGesture {
-            store.send(.chatHistoryItemClicked(id: info.id))
-            isChatHistoryVisible = false
+            .frame(maxHeight: .infinity)
+            .onHover(perform: {
+                isHovered = $0
+            })
+            .hoverRadiusBackground(isHovered: isHovered, cornerRadius: 4)
+            .onTapGesture {
+                store.send(.chatHistoryItemClicked(id: info.id))
+                isChatHistoryVisible = false
+            }
         }
     }
 }
@@ -202,16 +230,16 @@ struct ChatHistoryView_Previews: PreviewProvider {
             initialState: .init(
                 chatHistory: .init(
                     workspaces: [.init(
-                        id: "activeWorkspacePath",
+                        id: .init(path: "p", username: "u"),
                         tabInfo: [
-                            .init(id: "2", title: "Empty-2"),
-                            .init(id: "3", title: "Empty-3"),
-                            .init(id: "4", title: "Empty-4"),
-                            .init(id: "5", title: "Empty-5"),
-                            .init(id: "6", title: "Empty-6")
+                            .init(id: "2", title: "Empty-2", workspacePath: "path", username: "username"),
+                            .init(id: "3", title: "Empty-3", workspacePath: "path", username: "username"),
+                            .init(id: "4", title: "Empty-4", workspacePath: "path", username: "username"),
+                            .init(id: "5", title: "Empty-5", workspacePath: "path", username: "username"),
+                            .init(id: "6", title: "Empty-6", workspacePath: "path", username: "username")
                         ] as IdentifiedArray<String, ChatTabInfo>,
                         selectedTabId: "2"
-                    )] as IdentifiedArray<String, ChatWorkspace>,
+                    )] as IdentifiedArray<WorkspaceIdentifier, ChatWorkspace>,
                     selectedWorkspacePath: "activeWorkspacePath",
                     selectedWorkspaceName: "activeWorkspacePath"
                 ),

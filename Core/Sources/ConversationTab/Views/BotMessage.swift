@@ -5,7 +5,8 @@ import MarkdownUI
 import SharedUIComponents
 import SwiftUI
 import ConversationServiceProvider
-
+import ChatTab
+import ChatAPIService
 
 struct BotMessage: View {
     var r: Double { messageBubbleCornerRadius }
@@ -15,6 +16,9 @@ struct BotMessage: View {
     let followUp: ConversationFollowUp?
     let errorMessage: String?
     let chat: StoreOf<Chat>
+    let steps: [ConversationProgressStep]
+    let editAgentRounds: [AgentRound]
+    
     @Environment(\.colorScheme) var colorScheme
     @AppStorage(\.chatFontSize) var chatFontSize
 
@@ -98,6 +102,19 @@ struct BotMessage: View {
             }
         }
     }
+    
+    private var agentWorkingStatus: some View {
+        HStack(spacing: 4) {
+            ProgressView()
+                .controlSize(.small)
+                .frame(width: 20, height: 16)
+                .scaleEffect(0.7)
+            
+            Text("Working...")
+                .font(.system(size: chatFontSize))
+                .foregroundColor(.secondary)
+        }
+    }
 
     var body: some View {
         HStack {
@@ -114,18 +131,34 @@ struct BotMessage: View {
                         )
                     }
                 }
+                
+                // progress step
+                if steps.count > 0 {
+                    ProgressStep(steps: steps)
+                }
+                
+                if editAgentRounds.count > 0 {
+                    ProgressAgentRound(rounds: editAgentRounds, chat: chat)
+                }
 
-                ThemedMarkdownText(text: text, chat: chat)
+                if !text.isEmpty {
+                    ThemedMarkdownText(text: text, chat: chat)
+                }
 
                 if errorMessage != nil {
                     HStack(spacing: 4) {
                         Image(systemName: "info.circle")
-                        Text(errorMessage!)
-                            .font(.system(size: chatFontSize))
+                        ThemedMarkdownText(text: errorMessage!, chat: chat)
                     }
                 }
-
-                ResponseToolBar(id: id, chat: chat, text: text)
+                
+                if shouldShowWorkingStatus() {
+                    agentWorkingStatus
+                }
+                
+                if shouldShowToolBar() {
+                    ResponseToolBar(id: id, chat: chat, text: text)
+                }
             }
             .shadow(color: .black.opacity(0.05), radius: 6)
             .contextMenu {
@@ -145,6 +178,33 @@ struct BotMessage: View {
                 }
             }
         }
+    }
+    
+    private func shouldShowWorkingStatus() -> Bool {
+        let hasRunningStep: Bool = steps.contains(where: { $0.status == .running })
+        let hasRunningRound: Bool = editAgentRounds.contains(where: { round in
+            return round.toolCalls?.contains(where: { $0.status == .running }) ?? false
+        })
+        
+        if hasRunningStep || hasRunningRound {
+            return false
+        }
+        
+        // Only show working status for the current bot message being received
+        return chat.isReceivingMessage && isLatestAssistantMessage()
+    }
+    
+    private func shouldShowToolBar() -> Bool {
+        // Always show toolbar for historical messages
+        if !isLatestAssistantMessage() { return true }
+        
+        // For current message, only show toolbar when message is complete
+        return !chat.isReceivingMessage
+    }
+    
+    private func isLatestAssistantMessage() -> Bool {
+        let lastMessage = chat.history.last
+        return lastMessage?.role == .assistant && lastMessage?.id == id
     }
 }
 
@@ -175,6 +235,7 @@ struct ReferenceList: View {
                             HStack(spacing: 8) {
                                 drawFileIcon(reference.url)
                                     .resizable()
+                                    .scaledToFit()
                                     .frame(width: 16, height: 16)
                                 Text(reference.fileName)
                                     .truncationMode(.middle)
@@ -218,60 +279,92 @@ struct ReferenceList: View {
     }
 }
 
-#Preview("Bot Message") {
-    BotMessage(
-        id: "1",
-        text: """
-        **Hey**! What can I do for you?**Hey**! What can I do for you?**Hey**! What can I do for you?**Hey**! What can I do for you?
-        ```swift
-        func foo() {}
-        ```
-        """,
-        references: .init(repeating: .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .class
-        ), count: 2),
-        followUp: ConversationFollowUp(message: "followup question", id: "id", type: "type"),
-        errorMessage: "Sorry, an error occurred while generating a response.",
-        chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service()) })
-    )
-    .padding()
-    .fixedSize(horizontal: true, vertical: true)
+struct BotMessage_Previews: PreviewProvider {
+    static let steps: [ConversationProgressStep] = [
+        .init(id: "001", title: "running step", description: "this is running step", status: .running, error: nil),
+        .init(id: "002", title: "completed step", description: "this is completed step", status: .completed, error: nil),
+        .init(id: "003", title: "failed step", description: "this is failed step", status: .failed, error: nil),
+        .init(id: "004", title: "cancelled step", description: "this is cancelled step", status: .cancelled, error: nil)
+    ]
+
+    static let agentRounds: [AgentRound] = [
+        .init(roundId: 1, reply: "this is agent step 1", toolCalls: [
+            .init(
+                id: "toolcall_001",
+                name: "Tool Call 1",
+                progressMessage: "Read Tool Call 1",
+                status: .completed,
+                error: nil)
+            ]),
+        .init(roundId: 2, reply: "this is agent step 2", toolCalls: [
+            .init(
+                id: "toolcall_002",
+                name: "Tool Call 2",
+                progressMessage: "Running Tool Call 2",
+                status: .running)
+            ])
+        ]
+    
+    static var previews: some View {
+        let chatTabInfo = ChatTabInfo(id: "id", workspacePath: "path", username: "name")
+        BotMessage(
+            id: "1",
+            text: """
+            **Hey**! What can I do for you?**Hey**! What can I do for you?**Hey**! What can I do for you?**Hey**! What can I do for you?
+            ```swift
+            func foo() {}
+            ```
+            """,
+            references: .init(repeating: .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .class
+            ), count: 2),
+            followUp: ConversationFollowUp(message: "followup question", id: "id", type: "type"),
+            errorMessage: "Sorry, an error occurred while generating a response.",
+            chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service(for: chatTabInfo)) }),
+            steps: steps,
+            editAgentRounds: agentRounds
+        )
+        .padding()
+        .fixedSize(horizontal: true, vertical: true)
+    }
 }
 
-#Preview("Reference List") {
-    ReferenceList(references: [
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .class
-        ),
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views",
-            status: .included,
-            kind: .struct
-        ),
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .function
-        ),
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .case
-        ),
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .extension
-        ),
-        .init(
-            uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
-            status: .included,
-            kind: .webpage
-        ),
-    ], chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service()) }))
+struct ReferenceList_Previews: PreviewProvider {
+    static var previews: some View {
+        let chatTabInfo = ChatTabInfo(id: "id", workspacePath: "path", username: "name")
+        ReferenceList(references: [
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .class
+            ),
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views",
+                status: .included,
+                kind: .struct
+            ),
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .function
+            ),
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .case
+            ),
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .extension
+            ),
+            .init(
+                uri: "/Core/Sources/ConversationTab/Views/BotMessage.swift",
+                status: .included,
+                kind: .webpage
+            ),
+        ], chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service(for: chatTabInfo)) }))
+    }
 }
-

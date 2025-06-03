@@ -31,16 +31,6 @@ extension AppDelegate {
         let statusBarMenu = NSMenu(title: "Status Bar Menu")
         statusBarMenu.identifier = statusBarMenuIdentifier
         statusBarItem.menu = statusBarMenu
-
-        let boldTitle = NSAttributedString(
-            string: "Github Copilot",
-            attributes: [
-                .font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize),
-                .foregroundColor: NSColor(.primary)
-            ]
-        )
-        let attributedTitle = NSMenuItem()
-        attributedTitle.attributedTitle = boldTitle
         
         let checkForUpdate = NSMenuItem(
             title: "Check for Updates",
@@ -50,7 +40,7 @@ extension AppDelegate {
 
         openCopilotForXcodeItem = NSMenuItem(
             title: "Settings",
-            action: #selector(openCopilotForXcode),
+            action: #selector(openCopilotForXcodeSettings),
             keyEquivalent: ""
         )
 
@@ -67,10 +57,17 @@ extension AppDelegate {
 
         axStatusItem = NSMenuItem(
             title: "",
-            action: #selector(openExtensionStatusLink),
+            action: #selector(openAXStatusLink),
             keyEquivalent: ""
         )
         axStatusItem.isHidden = true
+
+        extensionStatusItem = NSMenuItem(
+            title: "",
+            action: #selector(openExtensionStatusLink),
+            keyEquivalent: ""
+        )
+        extensionStatusItem.isHidden = true
 
         let quitItem = NSMenuItem(
             title: "Quit",
@@ -103,14 +100,14 @@ extension AppDelegate {
             action: nil,
             keyEquivalent: ""
         )
-        axStatusItem.isHidden = true
+        authStatusItem.isHidden = true
 
         upSellItem = NSMenuItem(
             title: "",
             action: #selector(openUpSellLink),
             keyEquivalent: ""
         )
-        axStatusItem.isHidden = true
+        upSellItem.isHidden = true
 
         let openDocs = NSMenuItem(
             title: "View Documentation",
@@ -136,20 +133,21 @@ extension AppDelegate {
             keyEquivalent: ""
         )
 
-        statusBarMenu.addItem(attributedTitle)
         statusBarMenu.addItem(accountItem)
+        statusBarMenu.addItem(.separator())
         statusBarMenu.addItem(authStatusItem)
         statusBarMenu.addItem(upSellItem)
         statusBarMenu.addItem(.separator())
         statusBarMenu.addItem(axStatusItem)
-        statusBarMenu.addItem(.separator())
-        statusBarMenu.addItem(openCopilotForXcodeItem)
+        statusBarMenu.addItem(extensionStatusItem)
         statusBarMenu.addItem(.separator())
         statusBarMenu.addItem(checkForUpdate)
+        statusBarMenu.addItem(.separator())
+        statusBarMenu.addItem(openChat)
         statusBarMenu.addItem(toggleCompletions)
         statusBarMenu.addItem(toggleIgnoreLanguage)
-        statusBarMenu.addItem(openChat)
         statusBarMenu.addItem(.separator())
+        statusBarMenu.addItem(openCopilotForXcodeItem)
         statusBarMenu.addItem(openDocs)
         statusBarMenu.addItem(openForum)
         statusBarMenu.addItem(.separator())
@@ -328,11 +326,23 @@ private extension AppDelegate {
         }
     }
 
+    @objc func openAXStatusLink() {
+        Task {
+            if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+                NSWorkspace.shared.open(url)
+            }
+        }
+    }
+
     @objc func openExtensionStatusLink() {
         Task {
-            let status = await Status.shared.getStatus()
-            if let s = status.url, let url = URL(string: s) {
-                NSWorkspace.shared.open(url)
+            let status = await Status.shared.getExtensionStatus()
+            if status == .notGranted {
+                if let url = URL(string: "x-apple.systempreferences:com.apple.ExtensionsPreferences?extensionPointIdentifier=com.apple.dt.Xcode.extension.source-editor") {
+                    NSWorkspace.shared.open(url)
+                }
+            } else {
+                NSWorkspace.restartXcode()
             }
         }
     }

@@ -1,4 +1,5 @@
 import SwiftUI
+import Perception
 
 struct SettingsSection<Content: View, Footer: View>: View {
     let title: String
@@ -15,31 +16,33 @@ struct SettingsSection<Content: View, Footer: View>: View {
     }
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .bold()
-                .padding(.horizontal, 10)
-            if showWarning {
-                HStack{
-                    Text("GitHub Copilot features are disabled. Please [check your subscription](https://github.com/settings/copilot) to access them.")
-                        .foregroundColor(Color("WarningForegroundColor"))
-                        .padding(4)
-                    Spacer()
+        WithPerceptionTracking{
+            VStack(alignment: .leading, spacing: 10) {
+                Text(title)
+                    .bold()
+                    .padding(.horizontal, 10)
+                if showWarning {
+                    HStack{
+                        Text("GitHub Copilot features are disabled. Please [check your subscription](https://github.com/settings/copilot) to access them.")
+                            .foregroundColor(Color("WarningForegroundColor"))
+                            .padding(4)
+                        Spacer()
+                    }
+                    .background(Color("WarningBackgroundColor"))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 3)
+                            .stroke(Color("WarningStrokeColor"), lineWidth: 1)
+                    )
                 }
-                .background(Color("WarningBackgroundColor"))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 3)
-                        .stroke(Color("WarningStrokeColor"), lineWidth: 1)
-                )
+                VStack(alignment: .leading, spacing: 0) {
+                    content()
+                }
+                .background(Color.gray.opacity(0.1))
+                .cornerRadius(8)
+                footer()
             }
-            VStack(alignment: .leading, spacing: 0) {
-                content()
-            }
-            .background(Color.gray.opacity(0.1))
-            .cornerRadius(8)
-            footer()
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 

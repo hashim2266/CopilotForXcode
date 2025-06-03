@@ -15,11 +15,23 @@ struct HoverRadiusBackgroundModifier: ViewModifier {
     var isHovered: Bool
     var hoverColor: Color?
     var cornerRadius: CGFloat = 0
+    var showBorder: Bool = false
+    var borderColor: Color = .white.opacity(0.07)
+    var borderWidth: CGFloat = 1
 
     func body(content: Content) -> some View {
-        content.background(
-            RoundedRectangle(cornerRadius: cornerRadius)
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius)
                     .fill(isHovered ? hoverColor ?? ITEM_SELECTED_COLOR : Color.clear)
+            )
+            .overlay(
+                Group {
+                    if isHovered && showBorder {
+                        RoundedRectangle(cornerRadius: cornerRadius)
+                            .stroke(borderColor, lineWidth: borderWidth)
+                    }
+                }
             )
     }
 }
@@ -44,6 +56,10 @@ extension View {
 
     public func hoverRadiusBackground(isHovered: Bool, hoverColor: Color?, cornerRadius: CGFloat) -> some View {
         self.modifier(HoverRadiusBackgroundModifier(isHovered: isHovered, hoverColor: hoverColor, cornerRadius: cornerRadius))
+    }
+    
+    public func hoverRadiusBackground(isHovered: Bool, hoverColor: Color?, cornerRadius: CGFloat, showBorder: Bool) -> some View {
+        self.modifier(HoverRadiusBackgroundModifier(isHovered: isHovered, hoverColor: hoverColor, cornerRadius: cornerRadius, showBorder: showBorder))
     }
 
     public func hoverForeground(isHovered: Bool, defaultColor: Color) -> some View {

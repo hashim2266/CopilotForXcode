@@ -1,14 +1,19 @@
-### GitHub Copilot for Xcode 0.31.0
-**Highlights:**
+### GitHub Copilot for Xcode 0.35.0
 
-* **Chat view**: Ask Copilot for help with coding tasks directly in the chat view.
-* **Slash commands**: Use quick commands, like `/explain` for code explanations.
-* **Reference code**: Scope chats to specific files for more relevant assistance.
-* **Multiple conversations**: Maintain different threads, each with their own context.
-* **Chat history management**: Keep track of past conversations for future reference.
-* **Free access**: Get [2,000 code completions and 50 chat messages](https://github.com/copilot) per month for free, simply by signing in with your GitHub account or by creating a new one.
+**🚀 Highlights**
 
-**Fixes and improvements:**
+* **Agent Mode**: Copilot will automatically use multiple requests to edit files, run terminal commands, and fix errors.
+* **Model Context Protocol (MCP)**: Integrated with Agent Mode, allowing you to configure MCP tools to extend capabilities.
 
-* Fix acception does not work under certain circumstaances.
-* Support switching focus between chat textfield and file search bar.
+**💪 Improvements**
+
+* Added a button to enable/disable referencing current file in conversations
+* Added an animated progress icon in the response section
+* Refined onboarding experience with updated instruction screens and welcome views
+* Improved conversation reliability with extended timeout limits for agent requests
+
+**🛠️ Bug Fixes**
+
+* Addressed critical error handling issues in core functionality
+* Resolved UI inconsistencies with chat interface padding adjustments
+* Improved network access with automatic detection of system environment variables for custom certificates

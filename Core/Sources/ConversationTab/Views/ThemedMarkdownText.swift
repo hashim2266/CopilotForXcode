@@ -4,6 +4,7 @@ import SwiftUI
 import ChatService
 import ComposableArchitecture
 import SuggestionBasic
+import ChatTab
 
 struct ThemedMarkdownText: View {
     @AppStorage(\.syncChatCodeHighlightTheme) var syncCodeHighlightTheme
@@ -131,15 +132,18 @@ struct MarkdownCodeBlockView: View {
     }
 }
 
-#Preview("Themed Markdown Text") {
-    ThemedMarkdownText(
-        text:"""
-```swift
-let sumClosure: (Int, Int) -> Int = { (a: Int, b: Int) in
-    return a + b
-}
-```
-""",
-        chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service()) }))
+struct ThemedMarkdownText_Previews: PreviewProvider {
+    static var previews: some View {
+        let chatTabInfo = ChatTabInfo(id: "id", workspacePath: "path", username: "name")
+        ThemedMarkdownText(
+            text:"""
+    ```swift
+    let sumClosure: (Int, Int) -> Int = { (a: Int, b: Int) in
+        return a + b
+    }
+    ```
+    """,
+            chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service(for: chatTabInfo)) }))
+    }
 }
 

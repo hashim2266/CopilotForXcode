@@ -19,6 +19,7 @@ let package = Package(
         .library(name: "Toast", targets: ["Toast"]),
         .library(name: "SharedUIComponents", targets: ["SharedUIComponents"]),
         .library(name: "Status", targets: ["Status"]),
+        .library(name: "Persist", targets: ["Persist"]),
         .library(name: "UserDefaultsObserver", targets: ["UserDefaultsObserver"]),
         .library(name: "Workspace", targets: ["Workspace", "WorkspaceSuggestionService"]),
         .library(
@@ -60,7 +61,8 @@ let package = Package(
         .library(name: "CustomAsyncAlgorithms", targets: ["CustomAsyncAlgorithms"]),
         .library(name: "AXHelper", targets: ["AXHelper"]),
         .library(name: "Cache", targets: ["Cache"]),
-        .library(name: "StatusBarItemView", targets: ["StatusBarItemView"])
+        .library(name: "StatusBarItemView", targets: ["StatusBarItemView"]),
+        .library(name: "HostAppActivator", targets: ["HostAppActivator"]),
     ],
     dependencies: [
         // TODO: Update LanguageClient some day.
@@ -76,18 +78,19 @@ let package = Package(
         ),
         .package(url: "https://github.com/GottaGetSwifty/CodableWrappers", from: "2.0.7"),
         // TODO: remove CopilotForXcodeKit dependency once extension provider logic is removed.
-        .package(url: "https://github.com/devm33/CopilotForXcodeKit", branch: "main")
+        .package(url: "https://github.com/devm33/CopilotForXcodeKit", branch: "main"),
+        .package(url: "https://github.com/stephencelis/SQLite.swift", from: "0.15.3")
     ],
     targets: [
         // MARK: - Helpers
 
-        .target(name: "XPCShared", dependencies: ["SuggestionBasic", "Logger", "Status"]),
+        .target(name: "XPCShared", dependencies: ["SuggestionBasic", "Logger", "Status", "HostAppActivator"]),
 
         .target(name: "Configs"),
 
         .target(name: "Preferences", dependencies: ["Configs"]),
 
-        .target(name: "Terminal"),
+        .target(name: "Terminal", dependencies: ["Logger", "SystemUtils"]),
 
         .target(name: "Logger"),
 
@@ -119,6 +122,13 @@ let package = Package(
         ),
 
         .target(name: "ActiveApplicationMonitor"),
+        
+        .target(
+            name: "HostAppActivator",
+            dependencies: [
+                "Logger",
+            ]
+        ),
 
         .target(
             name: "SuggestionBasic",
@@ -197,8 +207,10 @@ let package = Package(
                 "Logger",
                 "Preferences",
                 "XcodeInspector",
+                "ConversationServiceProvider"
             ]
         ),
+        .testTarget(name: "WorkspaceTests", dependencies: ["Workspace"]),
 
         .target(
             name: "WorkspaceSuggestionService",
@@ -240,6 +252,15 @@ let package = Package(
             dependencies: ["Cache"]
         ),
 
+        .target(
+            name: "Persist",
+            dependencies: [
+                "Logger",
+                "Status",
+                .product(name: "SQLite", package: "SQLite.Swift")
+            ]
+        ),
+
         .target(name: "SuggestionProvider", dependencies: [
             "SuggestionBasic",
             "UserDefaultsObserver",
@@ -251,6 +272,7 @@ let package = Package(
         
         .target(name: "ConversationServiceProvider", dependencies: [
             .product(name: "CopilotForXcodeKit", package: "CopilotForXcodeKit"),
+            .product(name: "LanguageServerProtocol", package: "LanguageServerProtocol"),
         ]),
         
         .target(name: "TelemetryServiceProvider", dependencies: [
@@ -284,6 +306,8 @@ let package = Package(
                 "TelemetryServiceProvider",
                 "Status",
                 "SystemUtils",
+                "Workspace",
+                "Persist",
                 .product(name: "LanguageServerProtocol", package: "LanguageServerProtocol"),
                 .product(name: "CopilotForXcodeKit", package: "CopilotForXcodeKit"),
             ]
@@ -323,7 +347,11 @@ let package = Package(
         
         // MARK: - SystemUtils
         
-        .target(name: "SystemUtils"),
+        .target(
+            name: "SystemUtils",
+            dependencies: ["Logger"]
+        ),
+        .testTarget(name: "SystemUtilsTests", dependencies: ["SystemUtils"]),
     ]
 )
 

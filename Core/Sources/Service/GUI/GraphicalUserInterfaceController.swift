@@ -8,6 +8,8 @@ import Dependencies
 import Preferences
 import SuggestionBasic
 import SuggestionWidget
+import PersistMiddleware
+import ChatService
 
 #if canImport(ChatTabPersistent)
 import ChatTabPersistent
@@ -39,8 +41,8 @@ struct GUI {
         case toggleWidgetsHotkeyPressed
 
         case suggestionWidget(WidgetFeature.Action)
-        case switchWorkspace(path: String, name: String)
-        case initWorkspaceChatTabIfNeeded(path: String)
+        case switchWorkspace(path: String, name: String, username: String)
+        case initWorkspaceChatTabIfNeeded(path: String, username: String)
 
         static func promptToCodeGroup(_ action: PromptToCodeGroup.Action) -> Self {
             .suggestionWidget(.panel(.sharedPanel(.promptToCodeGroup(action))))
@@ -68,7 +70,7 @@ struct GUI {
                 state: \.chatHistory,
                 action: \.suggestionWidget.chatPanel
             ) {
-                Reduce { _, action in
+                Reduce { state, action in
                     switch action {
                     case let .createNewTapButtonClicked(kind):
 //                        return .run { send in
@@ -76,8 +78,11 @@ struct GUI {
 //                                await send(.createNewTab(chatTabInfo))
 //                            }
 //                        }
+                        // The chat workspace should exist before create tab
+                        guard let currentChatWorkspace = state.currentChatWorkspace else { return .none }
+                        
                         return .run { send in
-                            if let (_, chatTabInfo) = await chatTabPool.createTab(for: kind) {
+                            if let (_, chatTabInfo) = await chatTabPool.createTab(for: kind, with: currentChatWorkspace) {
                                 await send(.appendAndSelectTab(chatTabInfo))
                             }
                         }
@@ -88,9 +93,11 @@ struct GUI {
 //                        }
 
                     case let .chatTab(_, .openNewTab(builder)):
+                        // The chat workspace should exist before create tab
+                        guard let currentChatWorkspace = state.currentChatWorkspace else { return .none }
                         return .run { send in
                             if let (_, chatTabInfo) = await chatTabPool
-                                .createTab(from: builder.chatTabBuilder)
+                                .createTab(from: builder.chatTabBuilder, with: currentChatWorkspace)
                             {
                                 await send(.appendAndSelectTab(chatTabInfo))
                             }
@@ -132,8 +139,10 @@ struct GUI {
                     }
 
                 case .createAndSwitchToChatTabIfNeeded:
+                    // The chat workspace should exist before create tab
+                    guard let currentChatWorkspace = state.chatHistory.currentChatWorkspace else { return .none }
                     
-                    if let currentChatWorkspace = state.chatHistory.currentChatWorkspace, let selectedTabInfo = currentChatWorkspace.selectedTabInfo,
+                    if let selectedTabInfo = currentChatWorkspace.selectedTabInfo,
                        chatTabPool.getTab(of: selectedTabInfo.id) is ConversationTab
                     {
                         // Already in Chat tab
@@ -150,25 +159,25 @@ struct GUI {
                         }
                     }
                     return .run { send in
-                        if let (_, chatTabInfo) = await chatTabPool.createTab(for: nil) {
+                        if let (_, chatTabInfo) = await chatTabPool.createTab(for: nil, with: currentChatWorkspace) {
                             await send(
                                 .suggestionWidget(.chatPanel(.appendAndSelectTab(chatTabInfo)))
                             )
                         }
                     }
 
-                case let .switchWorkspace(path, name):
+                case let .switchWorkspace(path, name, username):
                     return .run { send in
                         await send(
-                            .suggestionWidget(.chatPanel(.switchWorkspace(path, name)))
+                            .suggestionWidget(.chatPanel(.switchWorkspace(path, name, username)))
                         )
-                        await send(.initWorkspaceChatTabIfNeeded(path: path))
                     }
-                case let .initWorkspaceChatTabIfNeeded(path):
-                    guard let chatWorkspace = state.chatHistory.workspaces[id: path], chatWorkspace.tabInfo.isEmpty
+                case let .initWorkspaceChatTabIfNeeded(path, username):
+                    let identifier = WorkspaceIdentifier(path: path, username: username)
+                    guard let chatWorkspace = state.chatHistory.workspaces[id: identifier], chatWorkspace.tabInfo.isEmpty
                             else { return .none }
                     return .run { send in
-                        if let (_, chatTabInfo) = await chatTabPool.createTab(for: nil) {
+                        if let (_, chatTabInfo) = await chatTabPool.createTab(for: nil, with: chatWorkspace) {
                             await send(
                                 .suggestionWidget(.chatPanel(.appendTabToWorkspace(chatTabInfo, chatWorkspace)))
                                 )
@@ -228,8 +237,10 @@ struct GUI {
                         }
                         try? await tab.service.handleCustomCommand(command)
                     }
+                    
+                    guard var currentChatWorkspace = state.chatHistory.currentChatWorkspace else { return .none }
 
-                    if let info = state.chatHistory.currentChatWorkspace?.selectedTabInfo,
+                    if let info = currentChatWorkspace.selectedTabInfo,
                        let activeTab = chatTabPool.getTab(of: info.id) as? ConversationTab
                     {
                         return .run { send in
@@ -238,22 +249,25 @@ struct GUI {
                         }
                     }
 
-                    if var chatWorkspace = state.chatHistory.currentChatWorkspace, let info = chatWorkspace.tabInfo.first(where: {
+                    let chatWorkspace = currentChatWorkspace
+                    if var info = currentChatWorkspace.tabInfo.first(where: {
                         chatTabPool.getTab(of: $0.id) is ConversationTab
                     }),
                         let chatTab = chatTabPool.getTab(of: info.id) as? ConversationTab
                     {
-                        chatWorkspace.selectedTabId = chatTab.id
-                        let updatedChatWorkspace = chatWorkspace
+                        let (originalTab, currentTab) = currentChatWorkspace.switchTab(to: &info)
+                        let updatedChatWorkspace = currentChatWorkspace
+                        
                         return .run { send in
                             await send(.suggestionWidget(.chatPanel(.updateChatHistory(updatedChatWorkspace))))
                             await send(.openChatPanel(forceDetach: false))
                             await stopAndHandleCommand(chatTab)
+                            await send(.suggestionWidget(.chatPanel(.saveChatTabInfo([originalTab, currentTab], chatWorkspace))))
                         }
                     }
 
                     return .run { send in
-                        guard let (chatTab, chatTabInfo) = await chatTabPool.createTab(for: nil)
+                        guard let (chatTab, chatTabInfo) = await chatTabPool.createTab(for: nil, with: chatWorkspace)
                         else {
                             return
                         }
@@ -322,6 +336,9 @@ public final class GraphicalUserInterfaceController {
     let widgetController: SuggestionWidgetController
     let widgetDataSource: WidgetDataSource
     let chatTabPool: ChatTabPool
+    
+    // Used for restoring. Handle concurrency
+    var restoredChatHistory: Set<WorkspaceIdentifier> = Set()
 
     class WeakStoreHolder {
         weak var store: StoreOf<GUI>?
@@ -365,13 +382,13 @@ public final class GraphicalUserInterfaceController {
             dependency: suggestionDependency
         )
 
-        chatTabPool.createStore = { id in
+        chatTabPool.createStore = { info in
             store.scope(
                 state: { state in
-                    state.chatHistory.currentChatWorkspace?.tabInfo[id: id] ?? .init(id: id, title: "")
+                    state.chatHistory.currentChatWorkspace?.tabInfo[id: info.id] ?? info
                 },
                 action: { childAction in
-                    .suggestionWidget(.chatPanel(.chatTab(id: id, action: childAction)))
+                    .suggestionWidget(.chatPanel(.chatTab(id: info.id, action: childAction)))
                 }
             )
         }
@@ -404,30 +421,63 @@ extension ChatTabPool {
     @MainActor
     func createTab(
         id: String = UUID().uuidString,
-        from builder: ChatTabBuilder
+        from builder: ChatTabBuilder,
+        with chatWorkspace: ChatWorkspace
     ) async -> (any ChatTab, ChatTabInfo)? {
         let id = id
-        let info = ChatTabInfo(id: id, title: "")
-        guard let chatTap = await builder.build(store: createStore(id)) else { return nil }
-        setTab(chatTap)
-        return (chatTap, info)
+        let info = ChatTabInfo(id: id, workspacePath: chatWorkspace.workspacePath, username: chatWorkspace.username)
+        guard let chatTab = await builder.build(store: createStore(info)) else { return nil }
+        setTab(chatTab)
+        return (chatTab, info)
     }
 
     @MainActor
     func createTab(
-        for kind: ChatTabKind?
+        for kind: ChatTabKind?,
+        with chatWorkspace: ChatWorkspace
     ) async -> (any ChatTab, ChatTabInfo)? {
         let id = UUID().uuidString
-        let info = ChatTabInfo(id: id, title: "")
+        let info = ChatTabInfo(id: id, workspacePath: chatWorkspace.workspacePath, username: chatWorkspace.username)
         guard let builder = kind?.builder else {
-            let chatTap = ConversationTab(store: createStore(id))
-            setTab(chatTap)
-            return (chatTap, info)
+            let chatTab = ConversationTab(store: createStore(info), with: info)
+            setTab(chatTab)
+            return (chatTab, info)
         }
         
-        guard let chatTap = await builder.build(store: createStore(id)) else { return nil }
-        setTab(chatTap)
-        return (chatTap, info)
+        guard let chatTab = await builder.build(store: createStore(info)) else { return nil }
+        setTab(chatTab)
+        return (chatTab, info)
     }
 }
 
+
+extension GraphicalUserInterfaceController {
+    
+    @MainActor
+    public func restore(path workspacePath: String, name workspaceName: String, username: String) async -> Void {
+        let workspaceIdentifier = WorkspaceIdentifier(path: workspacePath, username: username)
+        guard !restoredChatHistory.contains(workspaceIdentifier) else { return }
+        
+        // only restore once regardless of success or fail
+        restoredChatHistory.insert(workspaceIdentifier)
+        
+        let storedChatTabInfos = ChatTabInfoStore.getAll(with: .init(workspacePath: workspacePath, username: username))
+        if storedChatTabInfos.count > 0
+        {
+            var tabInfo: IdentifiedArray<String, ChatTabInfo> = []
+            for info in storedChatTabInfos {
+                tabInfo[id: info.id] = info
+                let chatTab = ConversationTab.restoreConversation(by: info, store: chatTabPool.createStore(info))
+                chatTabPool.setTab(chatTab)
+            }
+            
+            let chatWorkspace = ChatWorkspace(
+                id: .init(path: workspacePath, username: username),
+                tabInfo: tabInfo,
+                tabCollection: [],
+                selectedTabId: storedChatTabInfos.first(where: { $0.isSelected })?.id
+            )
+            self.store.send(.suggestionWidget(.chatPanel(.restoreWorkspace(chatWorkspace))))
+        }
+    }
+}

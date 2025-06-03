@@ -3,6 +3,7 @@ import JSONRPC
 import LanguageServerProtocol
 import Status
 import SuggestionBasic
+import ConversationServiceProvider
 
 struct GitHubCopilotDoc: Codable {
     var source: String
@@ -82,9 +83,21 @@ public func editorConfiguration() -> JSONValue {
         return .hash([ "uri": .string(enterpriseURI) ])
     }
 
+    var mcp: JSONValue? {
+        let mcpConfig = UserDefaults.shared.value(for: \.gitHubCopilotMCPConfig)
+        return JSONValue.string(mcpConfig)
+    }
+    
     var d: [String: JSONValue] = [:]
     if let http { d["http"] = http }
     if let authProvider { d["github-enterprise"] = authProvider }
+    if let mcp { 
+        var github: [String: JSONValue] = [:]
+        var copilot: [String: JSONValue] = [:]
+        copilot["mcp"] = mcp
+        github["copilot"] = .hash(copilot)
+        d["github"] = .hash(github)
+    }
     return .hash(d)
 }
 
@@ -341,10 +354,54 @@ enum GitHubCopilotRequest {
     // MARK: Conversation templates
 
     struct GetTemplates: GitHubCopilotRequestType {
-        typealias Response = Array<Template>
+        typealias Response = Array<ChatTemplate>
 
         var request: ClientRequest {
             .custom("conversation/templates", .hash([:]))
+        }
+    }
+
+    struct CopilotModels: GitHubCopilotRequestType {
+        typealias Response = Array<CopilotModel>
+
+        var request: ClientRequest {
+            .custom("copilot/models", .hash([:]))
+        }
+    }
+    
+    // MARK: MCP Tools
+    
+    struct UpdatedMCPToolsStatus: GitHubCopilotRequestType {
+        typealias Response = Array<MCPServerToolsCollection>
+        
+        var params: UpdateMCPToolsStatusParams
+
+        var request: ClientRequest {
+            let data = (try? JSONEncoder().encode(params)) ?? Data()
+            let dict = (try? JSONDecoder().decode(JSONValue.self, from: data)) ?? .hash([:])
+            return .custom("mcp/updateToolsStatus", dict)
+        }
+    }
+    
+    // MARK: - Conversation Agents
+    
+    struct GetAgents: GitHubCopilotRequestType {
+        typealias Response = Array<ChatAgent>
+
+        var request: ClientRequest {
+            .custom("conversation/agents", .hash([:]))
+        }
+    }
+
+    struct RegisterTools: GitHubCopilotRequestType {
+        struct Response: Codable {}
+
+        var params: RegisterToolsParams
+
+        var request: ClientRequest {
+            let data = (try? JSONEncoder().encode(params)) ?? Data()
+            let dict = (try? JSONDecoder().decode(JSONValue.self, from: data)) ?? .hash([:])
+            return .custom("conversation/registerTools", dict)
         }
     }
 
@@ -384,7 +441,6 @@ public enum GitHubCopilotNotification {
     public struct StatusNotification: Codable {
         public enum StatusKind : String, Codable {
             case normal = "Normal"
-            case inProgress = "InProgress"
             case error = "Error"
             case warning = "Warning"
             case inactive = "Inactive"
@@ -393,8 +449,6 @@ public enum GitHubCopilotNotification {
                 switch self {
                 case .normal:
                         .normal
-                case .inProgress:
-                        .inProgress
                 case .error:
                         .error
                 case .warning:
@@ -405,8 +459,9 @@ public enum GitHubCopilotNotification {
             }
         }
 
-        public var status: StatusKind
-        public var message: String
+        public var kind: StatusKind
+        public var busy: Bool
+        public var message: String?
 
         public static func decode(fromParams params: JSONValue?) -> StatusNotification? {
             try? JSONDecoder().decode(Self.self, from: (try? JSONEncoder().encode(params)) ?? Data())

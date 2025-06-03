@@ -3,6 +3,7 @@ import SwiftUI
 import ChatService
 import SharedUIComponents
 import ComposableArchitecture
+import ChatTab
 
 struct FunctionMessage: View {
     let chat: StoreOf<Chat>
@@ -78,58 +79,20 @@ struct FunctionMessage: View {
                 RoundedRectangle(cornerRadius: 6)
                     .stroke(Color(nsColor: .separatorColor), lineWidth: 1)
             )
-            
-//            HStack {
-//                Button(action: {
-//                    // Add your refresh action here
-//                }) {
-//                    Image(systemName: "arrow.clockwise")
-//                        .resizable()
-//                        .aspectRatio(contentMode: .fit)
-//                        .frame(width: 14, height: 14)
-//                        .frame(width: 20, height: 20, alignment: .center)
-//                        .foregroundColor(.secondary)
-//                        .background(
-//                            .regularMaterial,
-//                            in: RoundedRectangle(cornerRadius: 4, style: .circular)
-//                        )
-//                        .padding(4)
-//                }
-//                .buttonStyle(.borderless)
-//                
-//                DownvoteButton { rating in
-//                    chat.send(.downvote(id, rating))
-//                }
-//                
-//                Button(action: {
-//                    // Add your more options action here
-//                }) {
-//                    Image(systemName: "ellipsis")
-//                        .resizable()
-//                        .aspectRatio(contentMode: .fit)
-//                        .frame(width: 14, height: 14)
-//                        .frame(width: 20, height: 20, alignment: .center)
-//                        .foregroundColor(.secondary)
-//                        .background(
-//                            .regularMaterial,
-//                            in: RoundedRectangle(cornerRadius: 4, style: .circular)
-//                        )
-//                        .padding(4)
-//                }
-//                .buttonStyle(.borderless)
-//            }
+            .padding(.vertical, 4)
         }
-        .padding(.vertical, 12)
     }
 }
 
-#Preview {
-    FunctionMessage(
-        chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service()) }),
-        id: "1",
-        text: "You've reached your monthly chat limit. Upgrade to Copilot Pro (30-day free trial) or wait until 1/17/2025, 8:00:00 AM for your limit to reset."
-    )
-    .padding()
-    .fixedSize()
+struct FunctionMessage_Previews: PreviewProvider {
+    static var previews: some View {
+        let chatTabInfo = ChatTabInfo(id: "id", workspacePath: "path", username: "name")
+        FunctionMessage(
+            chat: .init(initialState: .init(), reducer: { Chat(service: ChatService.service(for: chatTabInfo)) }),
+            id: "1",
+            text: "You've reached your monthly chat limit. Upgrade to Copilot Pro (30-day free trial) or wait until 1/17/2025, 8:00:00 AM for your limit to reset."
+        )
+        .padding()
+        .fixedSize()
+    }
 }
-

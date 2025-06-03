@@ -15,6 +15,7 @@ import XcodeInspector
 import XPCShared
 import GitHubCopilotViewModel
 import StatusBarItemView
+import HostAppActivator
 
 let bundleIdentifierBase = Bundle.main
     .object(forInfoDictionaryKey: "BUNDLE_IDENTIFIER_BASE") as! String
@@ -34,6 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let service = Service.shared
     var statusBarItem: NSStatusItem!
     var axStatusItem: NSMenuItem!
+    var extensionStatusItem: NSMenuItem!
     var openCopilotForXcodeItem: NSMenuItem!
     var accountItem: NSMenuItem!
     var authStatusItem: NSMenuItem!
@@ -45,7 +47,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var xpcController: XPCController?
     let updateChecker =
         UpdateChecker(
-            hostBundle: Bundle(url: locateHostBundleURL(url: Bundle.main.bundleURL)),
+            hostBundle: Bundle(url: HostAppURL!),
             checkerDelegate: ExtensionUpdateCheckerDelegate()
         )
     var xpcExtensionService: XPCExtensionService?
@@ -73,6 +75,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     @objc func quit() {
+        if let hostApp = getRunningHostApp() {
+            hostApp.terminate()
+        }
+
+        // Start shutdown process in a task
         Task { @MainActor in
             await service.prepareForExit()
             await xpcController?.quit()
@@ -80,13 +87,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
-    @objc func openCopilotForXcode() {
-        let task = Process()
-        let appPath = locateHostBundleURL(url: Bundle.main.bundleURL)
-        task.launchPath = "/usr/bin/open"
-        task.arguments = [appPath.absoluteString]
-        task.launch()
-        task.waitUntilExit()
+    @objc func openCopilotForXcodeSettings() {
+        try? launchHostAppSettings()
     }
     
     @objc func signIntoGitHub() {
@@ -178,10 +180,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                     .userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
                     app.isUserOfService
                 else { continue }
-                if NSWorkspace.shared.runningApplications.contains(where: \.isUserOfService) {
-                    continue
+                
+                // Check if Xcode is running
+                let isXcodeRunning = NSWorkspace.shared.runningApplications.contains { 
+                    $0.bundleIdentifier == "com.apple.dt.Xcode" 
                 }
-                quit()
+                
+                if !isXcodeRunning {
+                    Logger.client.info("No Xcode instances running, preparing to quit")
+                    quit()
+                }
             }
         }
     }
@@ -250,10 +258,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func forceAuthStatusCheck() async {
         do {
-            let service = try GitHubCopilotService()
+            let service = try await GitHubCopilotViewModel.shared.getGitHubCopilotAuthService()
             _ = try await service.checkStatus()
-            try await service.shutdown()
-            try await service.exit()
         } catch {
             Logger.service.error("Failed to read auth status: \(error)")
         }
@@ -268,7 +274,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.upSellItem.isHidden = true
         self.toggleCompletions.isHidden = true
         self.toggleIgnoreLanguage.isHidden = true
-        self.openChat.isHidden = true
         self.signOutItem.isHidden = true
     }
 
@@ -310,7 +315,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         self.toggleCompletions.isHidden = false
         self.toggleIgnoreLanguage.isHidden = false
-        self.openChat.isHidden = false
         self.signOutItem.isHidden = false
     }
 
@@ -339,7 +343,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.upSellItem.isEnabled = true
         self.toggleCompletions.isHidden = true
         self.toggleIgnoreLanguage.isHidden = true
-        self.openChat.isHidden = true
         self.signOutItem.isHidden = false
     }
 
@@ -353,7 +356,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         self.upSellItem.isHidden = true
         self.toggleCompletions.isHidden = false
         self.toggleIgnoreLanguage.isHidden = false
-        self.openChat.isHidden = false
         self.signOutItem.isHidden = false
     }
 
@@ -372,14 +374,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             
             /// Update accessibility permission status bar item
+            let exclamationmarkImage = NSImage(
+                systemSymbolName: "exclamationmark.circle.fill",
+                accessibilityDescription: "Permission not granted"
+            )
+            exclamationmarkImage?.isTemplate = false
+            exclamationmarkImage?.withSymbolConfiguration(.init(paletteColors: [.red]))
+            
             if let message = status.message {
                 self.axStatusItem.title = message
-                if let image = NSImage(
-                    systemSymbolName: "exclamationmark.circle.fill",
-                    accessibilityDescription: "Accessibility permission not granted"
-                ) {
-                    image.isTemplate = false
-                    image.withSymbolConfiguration(.init(paletteColors: [.red]))
+                if let image = exclamationmarkImage {
                     self.axStatusItem.image = image
                 }
                 self.axStatusItem.isHidden = false
@@ -389,17 +393,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             }
             
             /// Update settings status bar item
-            if status.extensionStatus == .failed {
-                if let image = NSImage(
-                    systemSymbolName: "exclamationmark.circle.fill",
-                    accessibilityDescription: "Extension permission not granted"
-                ) {
-                    image.isTemplate = false
-                    image.withSymbolConfiguration(.init(paletteColors: [.red]))
-                    self.openCopilotForXcodeItem.image = image
+            if status.extensionStatus == .disabled || status.extensionStatus == .notGranted {
+                if let image = exclamationmarkImage{
+                    if #available(macOS 15.0, *){
+                        self.extensionStatusItem.image = image
+                        self.extensionStatusItem.title = status.extensionStatus == .notGranted ? "Enable extension for full-featured completion" : "Quit and restart Xcode to enable extension"
+                        self.extensionStatusItem.isHidden = false
+                        self.extensionStatusItem.isEnabled = status.extensionStatus == .notGranted
+                    } else {
+                        self.extensionStatusItem.isHidden = true
+                        self.openCopilotForXcodeItem.image = image
+                    }
                 }
             } else {
                 self.openCopilotForXcodeItem.image = nil
+                self.extensionStatusItem.isHidden = true
             }
             self.markAsProcessing(status.inProgress)
         }
@@ -445,20 +453,6 @@ extension NSRunningApplication {
     }
 }
 
-func locateHostBundleURL(url: URL) -> URL {
-    var nextURL = url
-    while nextURL.path != "/" {
-        nextURL = nextURL.deletingLastPathComponent()
-        if nextURL.lastPathComponent.hasSuffix(".app") {
-            return nextURL
-        }
-    }
-    let devAppURL = url
-        .deletingLastPathComponent()
-        .appendingPathComponent("GitHub Copilot for Xcode Dev.app")
-    return devAppURL
-}
-
 struct CLSMessage {
     let summary: String
     let detail: String
@@ -476,7 +470,7 @@ func getCLSMessageSummary(_ message: String) -> CLSMessage {
     let summary: String
     if message.contains("You've reached your monthly chat messages limit") {
         summary = "Monthly Chat Limit Reached"
-    } else if message.contains("You've reached your monthly code completion limit") {
+    } else if message.contains("Completions limit reached") {
         summary = "Monthly Completion Limit Reached"
     } else {
         summary = "CLS Error"

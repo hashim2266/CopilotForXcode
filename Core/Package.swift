@@ -131,6 +131,7 @@ let package = Package(
                     .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
                     .product(name: "KeyboardShortcuts", package: "KeyboardShortcuts"),
                     .product(name: "GitHubCopilotService", package: "Tool"),
+                    .product(name: "Persist", package: "Tool"),
                 ]),
         
         // MARK: - Suggestion Service
@@ -170,6 +171,7 @@ let package = Package(
             .target(
                 name: "ChatService",
                 dependencies: [
+                    "PersistMiddleware",
                     .product(name: "AppMonitoring", package: "Tool"),
                     .product(name: "Parsing", package: "swift-parsing"),
                     .product(name: "ChatAPIService", package: "Tool"),
@@ -177,7 +179,13 @@ let package = Package(
                     .product(name: "AXHelper", package: "Tool"),
                     .product(name: "ConversationServiceProvider", package: "Tool"),
                     .product(name: "GitHubCopilotService", package: "Tool"),
+                    .product(name: "Workspace", package: "Tool"),
+                    .product(name: "Terminal", package: "Tool")
                 ]),
+            .testTarget(
+                name: "ChatServiceTests",
+                dependencies: ["ChatService"]
+            ),
 
             .target(
                 name: "ConversationTab",
@@ -191,12 +199,10 @@ let package = Package(
                     .product(name: "Cache", package: "Tool"),
                     .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                     .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
-                    .product(name: "SwiftUIFlowLayout", package: "swiftui-flow-layout")
+                    .product(name: "SwiftUIFlowLayout", package: "swiftui-flow-layout"),
+                    .product(name: "Persist", package: "Tool"),
+                    .product(name: "Terminal", package: "Tool")
                 ]
-            ),
-            .testTarget(
-                name: "ConversationTabTests",
-                dependencies: ["ConversationTab"]
             ),
         
         // MARK: - UI
@@ -207,6 +213,7 @@ let package = Package(
                     "PromptToCodeService",
                     "ConversationTab",
                     "GitHubCopilotViewModel",
+                    "PersistMiddleware",
                     .product(name: "GitHubCopilotService", package: "Tool"),
                     .product(name: "Toast", package: "Tool"),
                     .product(name: "UserDefaultsObserver", package: "Tool"),
@@ -215,6 +222,7 @@ let package = Package(
                     .product(name: "ChatTab", package: "Tool"),
                     .product(name: "Logger", package: "Tool"),
                     .product(name: "CustomAsyncAlgorithms", package: "Tool"),
+                    .product(name: "HostAppActivator", package: "Tool"),
                     .product(name: "AsyncAlgorithms", package: "swift-async-algorithms"),
                     .product(name: "MarkdownUI", package: "swift-markdown-ui"),
                     .product(name: "ComposableArchitecture", package: "swift-composable-architecture"),
@@ -277,7 +285,17 @@ let package = Package(
                 .product(name: "Highlightr", package: "Highlightr"),
             ]
         ),
-
+        
+        // MARK: Persist Middleware
+        .target(
+            name: "PersistMiddleware",
+            dependencies: [
+                .product(name: "Persist", package: "Tool"),
+                .product(name: "ChatTab", package: "Tool"),
+                .product(name: "ChatAPIService", package: "Tool"),
+                .product(name: "ConversationServiceProvider", package: "Tool")
+            ]
+        )
     ]
 )
 

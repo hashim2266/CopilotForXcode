@@ -18,14 +18,18 @@ struct ChatWindowView: View {
 
     var body: some View {
         WithPerceptionTracking {
-            let _ = store.currentChatWorkspace?.selectedTabId // force re-evaluation
+            // Force re-evaluation when workspace state changes
+            let currentWorkspace = store.currentChatWorkspace
+            let selectedTabId = currentWorkspace?.selectedTabId
             ZStack {
                 if statusObserver.observedAXStatus == .notGranted {
                     ChatNoAXPermissionView()
                 } else {
                     switch statusObserver.authStatus.status {
                     case .loggedIn:
-                        if isChatHistoryVisible {
+                        if currentWorkspace == nil || (currentWorkspace?.tabInfo.isEmpty ?? true) {
+                            ChatNoWorkspaceView()
+                        } else if isChatHistoryVisible {
                             ChatHistoryViewWrapper(store: store, isChatHistoryVisible: $isChatHistoryVisible)
                         } else {
                             ChatView(store: store, isChatHistoryVisible: $isChatHistoryVisible)
@@ -115,7 +119,7 @@ struct ChatLoadingView: View {
             Spacer()
             
             VStack(spacing: 24) {
-                Instruction()
+                Instruction(isAgentMode: .constant(false))
                 
                 ProgressView("Loading...")
                     
@@ -253,6 +257,8 @@ struct ChatBar: View {
                 CreateButton(store: store)
 
                 ChatHistoryButton(store: store, isChatHistoryVisible: $isChatHistoryVisible)
+                
+                SettingsButton(store: store)
             }
             .padding(.horizontal, 12)
         }
@@ -332,11 +338,12 @@ struct ChatBar: View {
                 Button(action: {
                     store.send(.createNewTapButtonClicked(kind: nil))
                 }) {
-                    Image(systemName: "plus")
+                    Image(systemName: "plus.bubble")
                 }
                 .buttonStyle(HoverButtonStyle())
                 .padding(.horizontal, 4)
                 .help("New Chat")
+                .accessibilityLabel("New Chat")
             }
         }
     }
@@ -350,14 +357,34 @@ struct ChatBar: View {
                 Button(action: {
                     isChatHistoryVisible = true
                 }) {
-                    Image("HistoryIcon")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 24, height: 24)
+                    if #available(macOS 15.0, *) {
+                        Image(systemName: "clock.arrow.trianglehead.counterclockwise.rotate.90")
+                    } else {
+                        Image(systemName: "clock.arrow.circlepath")
+                    }
                 }
-                .buttonStyle(HoverButtonStyle(padding: -2))
+                .buttonStyle(HoverButtonStyle())
+                .padding(.horizontal, 4)
                 .help("Show Chats...")
                 .accessibilityLabel("Show Chats...")
+            }
+        }
+    }
+    
+    struct SettingsButton: View {
+        let store: StoreOf<ChatPanelFeature>
+
+        var body: some View {
+            WithPerceptionTracking {
+                Button(action: {
+                    store.send(.openSettings)
+                }) {
+                    Image(systemName: "gearshape")
+                }
+                .buttonStyle(HoverButtonStyle())
+                .padding(.horizontal, 4)
+                .help("Open Settings")
+                .accessibilityLabel("Open Settings")
             }
         }
     }
@@ -392,32 +419,42 @@ struct ChatTabContainer: View {
 
     var body: some View {
         WithPerceptionTracking {
-            let tabInfo = store.currentChatWorkspace?.tabInfo
+            let tabInfoArray = store.currentChatWorkspace?.tabInfo
             let selectedTabId = store.currentChatWorkspace?.selectedTabId
                 ?? store.currentChatWorkspace?.tabInfo.first?.id
                 ?? ""
 
-            ZStack {
-                if tabInfo == nil || tabInfo!.isEmpty {
-                    Text("Empty")
-                } else {
-                    ForEach(tabInfo!) { tabInfo in
-                        if let tab = chatTabPool.getTab(of: tabInfo.id) {
-                            let isActive = tab.id == selectedTabId
-                            tab.body
-                                .opacity(isActive ? 1 : 0)
-                                .disabled(!isActive)
-                                .allowsHitTesting(isActive)
-                                .frame(maxWidth: .infinity, maxHeight: .infinity)
-                                // move it out of window
-                                .rotationEffect(
-                                    isActive ? .zero : .degrees(90),
-                                    anchor: .topLeading
-                                )
-                        } else {
-                            EmptyView()
-                        }
-                    }
+            if let tabInfoArray = tabInfoArray, !tabInfoArray.isEmpty {
+                activeTabsView(
+                    tabInfoArray: tabInfoArray,
+                    selectedTabId: selectedTabId
+                )
+            } else {
+                // Fallback view for empty state (rarely seen in practice)
+                EmptyView().frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+        }
+    }
+
+    // View displayed when there are active tabs
+    private func activeTabsView(
+        tabInfoArray: IdentifiedArray<String, ChatTabInfo>,
+        selectedTabId: String
+    ) -> some View {
+        ZStack {
+            ForEach(tabInfoArray) { tabInfo in
+                if let tab = chatTabPool.getTab(of: tabInfo.id) {
+                    let isActive = tab.id == selectedTabId
+                    tab.body
+                        .opacity(isActive ? 1 : 0)
+                        .disabled(!isActive)
+                        .allowsHitTesting(isActive)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        // Inactive tabs are rotated out of view
+                        .rotationEffect(
+                            isActive ? .zero : .degrees(90),
+                            anchor: .topLeading
+                        )
                 }
             }
         }
@@ -452,18 +489,18 @@ struct ChatWindowView_Previews: PreviewProvider {
                 chatHistory: .init(
                     workspaces: [
                         .init(
-                            id: "activeWorkspacePath",
+                            id: .init(path: "p", username: "u"),
                             tabInfo: [
-                                .init(id: "2", title: "Empty-2"),
-                                .init(id: "3", title: "Empty-3"),
-                                .init(id: "4", title: "Empty-4"),
-                                .init(id: "5", title: "Empty-5"),
-                                .init(id: "6", title: "Empty-6"),
-                                .init(id: "7", title: "Empty-7"),
+                                .init(id: "2", title: "Empty-2", workspacePath: "path", username: "username"),
+                                .init(id: "3", title: "Empty-3", workspacePath: "path", username: "username"),
+                                .init(id: "4", title: "Empty-4", workspacePath: "path", username: "username"),
+                                .init(id: "5", title: "Empty-5", workspacePath: "path", username: "username"),
+                                .init(id: "6", title: "Empty-6", workspacePath: "path", username: "username"),
+                                .init(id: "7", title: "Empty-7", workspacePath: "path", username: "username"),
                             ] as IdentifiedArray<String, ChatTabInfo>,
                             selectedTabId: "2"
                         )
-                    ] as IdentifiedArray<String, ChatWorkspace>,
+                    ] as IdentifiedArray<WorkspaceIdentifier, ChatWorkspace>,
                     selectedWorkspacePath: "activeWorkspacePath",
                     selectedWorkspaceName: "activeWorkspacePath"
                 ),

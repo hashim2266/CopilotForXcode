@@ -3,21 +3,27 @@
 [GitHub Copilot](https://github.com/features/copilot) is an AI pair programmer
 tool that helps you write code faster and smarter. Copilot for Xcode is an Xcode extension that provides inline coding suggestions as you type and a chat assistant to answer your coding questions.
 
-## Chat [Preview]
+## Chat
 
 GitHub Copilot Chat provides suggestions to your specific coding tasks via chat.
 <img alt="Chat of GitHub Copilot for Xcode" src="./Docs/chat_dark.gif" width="800" />
+
+## Agent Mode
+
+GitHub Copilot Agent Mode provides AI-powered assistance that can understand and modify your codebase directly. With Agent Mode, you can:
+- Get intelligent code edits applied directly to your files
+- Run terminal commands and view their output without leaving the interface
+- Search through your codebase to find relevant files and code snippets
+- Create new files and directories as needed for your project
+- Get assistance with enhanced context awareness across multiple files and folders
+- Run Model Context Protocol (MCP) tools you configured to extend the capabilities
+
+Agent Mode integrates with Xcode's environment, creating a seamless development experience where Copilot can help implement features, fix bugs, and refactor code with comprehensive understanding of your project.
 
 ## Code Completion
 
 You can receive auto-complete type suggestions from GitHub Copilot either by starting to write the code you want to use, or by writing a natural language comment describing what you want the code to do.
 <img alt="Code Completion of GitHub Copilot for Xcode" src="./Docs/demo.gif" width="800" />
-
-## Preview Policy
-
-Use of the GitHub Copilot Xcode Extension is subject to [GitHub's Pre-Release Terms](https://docs.github.com/en/site-policy/github-terms/github-pre-release-license-terms). We want to remind you that:
-
-> Previews may not be supported or may change at any time. You may receive confidential information through those programs that must remain confidential while the program is private. We'd love your feedback to make our Previews better.
 
 ## Requirements
 
@@ -49,14 +55,12 @@ Use of the GitHub Copilot Xcode Extension is subject to [GitHub's Pre-Release Te
    </p>
 
 
-1. A background item will be added to enable Copilot to start when `GitHub Copilot for Xcode` is opened.
+1. A background item will be added to enable the GitHub Copilot for Xcode extension app to connect to the host app. This permission is usually automatically added when first launching the app.
    <p align="center">
      <img alt="Screenshot of background item" src="./Docs/background-item.png" width="370" />
    </p>
 
-1. Two permissions are required: `Accessibility` and `Xcode Source Editor
-   Extension`. For more on why these permissions are required see
-   [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
+1. Three permissions are required for GitHub Copilot for Xcode to function properly: `Background`, `Accessibility`, and `Xcode Source Editor Extension`. For more details on why these permissions are required see [TROUBLESHOOTING.md](./TROUBLESHOOTING.md).
 
    The first time the application is run the `Accessibility` permission should be requested:
 
@@ -106,11 +110,7 @@ Use of the GitHub Copilot Xcode Extension is subject to [GitHub's Pre-Release Te
 1. Press `tab` to accept the first line of a suggestion, hold `option` to view
    the full suggestion, and press `option` + `tab` to accept the full suggestion.
 
-   <p align="center">
-     <img alt="Screenshot of welcome screen" src="./Docs/welcome.png" width="672" />
-   </p>
-
-## How to use Chat [Preview]
+## How to use Chat
 
    Open Copilot Chat in GitHub Copilot.
   - Open via the Xcode menu `Xcode -> Editor -> GitHub Copilot -> Open Chat`.
@@ -121,7 +121,7 @@ Use of the GitHub Copilot Xcode Extension is subject to [GitHub's Pre-Release Te
   - Open via GitHub Copilot app menu `Open Chat`.
 
   <p align="center">
-    <img alt="Screenshot of GitHub Copilot menu item" src="./Docs/copilot-menu_dark.png" width="182" />
+    <img alt="Screenshot of GitHub Copilot menu item" src="./Docs/copilot-menu_dark.png" width="244" />
   </p>
 
 ## How to use Code Completion

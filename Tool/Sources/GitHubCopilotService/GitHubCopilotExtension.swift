@@ -52,12 +52,19 @@ public final class GitHubCopilotExtension: BuiltinExtension {
         { return }
 
         Task {
+            let content: String
             do {
-                let content = try String(contentsOf: documentURL, encoding: .utf8)
+                content = try String(contentsOf: documentURL, encoding: .utf8)
+            } catch {
+                Logger.extension.info("Failed to read \(documentURL.lastPathComponent): \(error)")
+                return
+            }
+            
+            do {
                 guard let service = await serviceLocator.getService(from: workspace) else { return }
                 try await service.notifyOpenTextDocument(fileURL: documentURL, content: content)
             } catch {
-                Logger.gitHubCopilot.error(error.localizedDescription)
+                Logger.gitHubCopilot.info(error.localizedDescription)
             }
         }
     }
@@ -69,7 +76,7 @@ public final class GitHubCopilotExtension: BuiltinExtension {
                 guard let service = await serviceLocator.getService(from: workspace) else { return }
                 try await service.notifySaveTextDocument(fileURL: documentURL)
             } catch {
-                Logger.gitHubCopilot.error(error.localizedDescription)
+                Logger.gitHubCopilot.info(error.localizedDescription)
             }
         }
     }
@@ -81,7 +88,7 @@ public final class GitHubCopilotExtension: BuiltinExtension {
                 guard let service = await serviceLocator.getService(from: workspace) else { return }
                 try await service.notifyCloseTextDocument(fileURL: documentURL)
             } catch {
-                Logger.gitHubCopilot.error(error.localizedDescription)
+                Logger.gitHubCopilot.info(error.localizedDescription)
             }
         }
     }
@@ -115,10 +122,10 @@ public final class GitHubCopilotExtension: BuiltinExtension {
                     // Reopen document if it's not found in the language server
                     self.workspace(workspace, didOpenDocumentAt: documentURL)
                 default:
-                    Logger.gitHubCopilot.error(error.localizedDescription)
+                    Logger.gitHubCopilot.info(error.localizedDescription)
                 }
             } catch {
-                Logger.gitHubCopilot.error(error.localizedDescription)
+                Logger.gitHubCopilot.info(error.localizedDescription)
             }
         }
     }

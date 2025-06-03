@@ -1,15 +1,18 @@
 import AppKit
 import Foundation
 
-public enum ExtensionPermissionStatus { case unknown, succeeded, failed }
+@objc public enum ExtensionPermissionStatus: Int {
+    case unknown = -1, notGranted = 0, disabled = 1, granted = 2
+}
 
 @objc public enum ObservedAXStatus: Int {
     case unknown = -1, granted = 1, notGranted = 0
 }
 
 public struct CLSStatus: Equatable {
-    public enum Status { case unknown, normal, inProgress, error, warning, inactive }
+    public enum Status { case unknown, normal, error, warning, inactive }
     public let status: Status
+    public let busy: Bool
     public let message: String
     
     public var isInactiveStatus: Bool { status == .inactive && !message.isEmpty }
@@ -77,12 +80,13 @@ public struct StatusResponse {
     public let userName: String?
 }
 
+private var currentUserName: String? = nil
 public final actor Status {
     public static let shared = Status()
 
     private var extensionStatus: ExtensionPermissionStatus = .unknown
     private var axStatus: ObservedAXStatus = .unknown
-    private var clsStatus = CLSStatus(status: .unknown, message: "")
+    private var clsStatus = CLSStatus(status: .unknown, busy: false, message: "")
     private var authStatus = AuthStatus(status: .unknown, username: nil, message: nil)
 
     private let okIcon = StatusResponse.Icon(name: "MenuBarIcon")
@@ -90,6 +94,10 @@ public final actor Status {
     private let inactiveIcon = StatusResponse.Icon(name: "MenuBarInactiveIcon")
 
     private init() {}
+
+    public static func currentUser() -> String? {
+        return currentUserName
+    }
 
     public func updateExtensionStatus(_ status: ExtensionPermissionStatus) {
         guard status != extensionStatus else { return }
@@ -103,14 +111,15 @@ public final actor Status {
         broadcast()
     }
 
-    public func updateCLSStatus(_ status: CLSStatus.Status, message: String) {
-        let newStatus = CLSStatus(status: status, message: message)
+    public func updateCLSStatus(_ status: CLSStatus.Status, busy: Bool, message: String) {
+        let newStatus = CLSStatus(status: status, busy: busy, message: message)
         guard newStatus != clsStatus else { return }
         clsStatus = newStatus
         broadcast()
     }
 
     public func updateAuthStatus(_ status: AuthStatus.Status, username: String? = nil, message: String? = nil) {
+        currentUserName = username
         let newStatus = AuthStatus(status: status, username: username, message: message)
         guard newStatus != authStatus else { return }
         authStatus = newStatus
@@ -149,12 +158,12 @@ public final actor Status {
         let authStatusInfo: AuthStatusInfo = getAuthStatusInfo()
         let clsStatusInfo: CLSStatusInfo = getCLSStatusInfo()
         let extensionStatusIcon = (
-            extensionStatus == ExtensionPermissionStatus.failed
+            extensionStatus == ExtensionPermissionStatus.disabled || extensionStatus == ExtensionPermissionStatus.notGranted
         ) ? errorIcon : nil
         let accessibilityStatusInfo: AccessibilityStatusInfo = getAccessibilityStatusInfo()
         return .init(
             icon: authStatusInfo.authIcon ?? clsStatusInfo.icon ?? extensionStatusIcon ?? accessibilityStatusInfo.icon ?? okIcon,
-            inProgress: clsStatus.status == .inProgress,
+            inProgress: clsStatus.busy,
             clsMessage: clsStatus.message,
             message: accessibilityStatusInfo.message,
             extensionStatus: extensionStatus,

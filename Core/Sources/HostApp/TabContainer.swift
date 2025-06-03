@@ -7,22 +7,30 @@ import Toast
 import UpdateChecker
 
 @MainActor
-let hostAppStore: StoreOf<HostApp> = .init(initialState: .init(), reducer: { HostApp() })
+public let hostAppStore: StoreOf<HostApp> = .init(initialState: .init(), reducer: { HostApp() })
 
 public struct TabContainer: View {
     let store: StoreOf<HostApp>
     @ObservedObject var toastController: ToastController
     @State private var tabBarItems = [TabBarItem]()
-    @State var tag: Int = 0
+    @Binding var tag: Int
 
     public init() {
         toastController = ToastControllerDependencyKey.liveValue
         store = hostAppStore
+        _tag = Binding(
+            get: { hostAppStore.state.activeTabIndex },
+            set: { hostAppStore.send(.setActiveTab($0)) }
+        )
     }
 
     init(store: StoreOf<HostApp>, toastController: ToastController) {
         self.store = store
         self.toastController = toastController
+        _tag = Binding(
+            get: { store.state.activeTabIndex },
+            set: { store.send(.setActiveTab($0)) }
+        )
     }
 
     public var body: some View {
@@ -39,9 +47,14 @@ public struct TabContainer: View {
                             isSystemImage: false
                         )
                     AdvancedSettings().tabBarItem(
-                        tag: 2,
+                        tag: 1,
                         title: "Advanced",
                         image: "gearshape.2.fill"
+                    )
+                    MCPConfigView().tabBarItem(
+                        tag: 2,
+                        title: "MCP",
+                        image: "wrench.and.screwdriver.fill"
                     )
                 }
                 .environment(\.tabBarTabTag, tag)
@@ -225,12 +238,35 @@ struct TabContainer_Toasts_Previews: PreviewProvider {
         TabContainer(
             store: .init(initialState: .init(), reducer: { HostApp() }),
             toastController: .init(messages: [
-                .init(id: UUID(), type: .info, content: Text("info")),
-                .init(id: UUID(), type: .error, content: Text("error")),
-                .init(id: UUID(), type: .warning, content: Text("warning")),
+                .init(id: UUID(), level: .info, content: Text("info")),
+                .init(id: UUID(), level: .error, content: Text("error")),
+                .init(id: UUID(), level: .warning, content: Text("warning")),
             ])
         )
         .frame(width: 800)
     }
 }
 
+@available(macOS 14.0, *)
+@MainActor
+public struct SettingsEnvironment: View {
+    @Environment(\.openSettings) public var openSettings: OpenSettingsAction
+    
+    public init() {}
+    
+    public var body: some View {
+        EmptyView().onAppear {
+            openSettings()
+        }
+    }
+    
+    public func open() {
+        let controller = NSHostingController(rootView: self)
+        let window = NSWindow(contentViewController: controller)
+        window.orderFront(nil)
+        // Close the temporary window after settings are opened
+        DispatchQueue.main.async {
+            window.close()
+        }
+    }
+}

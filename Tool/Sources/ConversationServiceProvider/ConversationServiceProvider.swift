@@ -1,6 +1,7 @@
 import CopilotForXcodeKit
 import Foundation
 import CodableWrappers
+import LanguageServerProtocol
 
 public protocol ConversationServiceType {
     func createConversation(_ request: ConversationRequest, workspace: WorkspaceInfo) async throws
@@ -9,18 +10,24 @@ public protocol ConversationServiceType {
     func rateConversation(turnId: String, rating: ConversationRating, workspace: WorkspaceInfo) async throws
     func copyCode(request: CopyCodeRequest, workspace: WorkspaceInfo) async throws
     func templates(workspace: WorkspaceInfo) async throws -> [ChatTemplate]?
+    func models(workspace: WorkspaceInfo) async throws -> [CopilotModel]?
+    func notifyDidChangeWatchedFiles(_ event: DidChangeWatchedFilesEvent, workspace: WorkspaceInfo) async throws
+    func agents(workspace: WorkspaceInfo) async throws -> [ChatAgent]?
 }
 
 public protocol ConversationServiceProvider {
-    func createConversation(_ request: ConversationRequest) async throws
-    func createTurn(with conversationId: String, request: ConversationRequest) async throws
-    func stopReceivingMessage(_ workDoneToken: String) async throws
-    func rateConversation(turnId: String, rating: ConversationRating) async throws
-    func copyCode(_ request: CopyCodeRequest) async throws
+    func createConversation(_ request: ConversationRequest, workspaceURL: URL?) async throws
+    func createTurn(with conversationId: String, request: ConversationRequest, workspaceURL: URL?) async throws
+    func stopReceivingMessage(_ workDoneToken: String, workspaceURL: URL?) async throws
+    func rateConversation(turnId: String, rating: ConversationRating, workspaceURL: URL?) async throws
+    func copyCode(_ request: CopyCodeRequest, workspaceURL: URL?) async throws
     func templates() async throws -> [ChatTemplate]?
+    func models() async throws -> [CopilotModel]?
+    func notifyDidChangeWatchedFiles(_ event: DidChangeWatchedFilesEvent, workspace: WorkspaceInfo) async throws
+    func agents() async throws -> [ChatAgent]?
 }
 
-public struct FileReference: Hashable {
+public struct FileReference: Hashable, Codable, Equatable {
     public let url: URL
     public let relativePath: String?
     public let fileName: String?
@@ -64,28 +71,54 @@ extension FileReference {
     }
 }
 
+public struct TurnSchema: Codable {
+    public var request: String
+    public var response: String?
+    public var agentSlug: String?
+    public var turnId: String?
+    
+    public init(request: String, response: String? = nil, agentSlug: String? = nil, turnId: String? = nil) {
+        self.request = request
+        self.response = response
+        self.agentSlug = agentSlug
+        self.turnId = turnId
+    }
+}
+
 public struct ConversationRequest {
     public var workDoneToken: String
     public var content: String
     public var workspaceFolder: String
+    public var activeDoc: Doc?
     public var skills: [String]
     public var ignoredSkills: [String]?
     public var references: [FileReference]?
+    public var model: String?
+    public var turns: [TurnSchema]
+    public var agentMode: Bool = false
 
     public init(
         workDoneToken: String,
         content: String,
         workspaceFolder: String,
+        activeDoc: Doc? = nil,
         skills: [String],
         ignoredSkills: [String]? = nil,
-        references: [FileReference]? = nil
+        references: [FileReference]? = nil,
+        model: String? = nil,
+        turns: [TurnSchema] = [],
+        agentMode: Bool = false
     ) {
         self.workDoneToken = workDoneToken
         self.content = content
         self.workspaceFolder = workspaceFolder
+        self.activeDoc = activeDoc
         self.skills = skills
         self.ignoredSkills = ignoredSkills
         self.references = references
+        self.model = model
+        self.turns = turns
+        self.agentMode = agentMode
     }
 }
 
@@ -118,77 +151,6 @@ public enum CopyKind: Int, Codable {
     case toolbar = 2
 }
 
-public struct ConversationReference: Codable, Equatable {
-    public enum Kind: String, Codable {
-        case `class`
-        case `struct`
-        case `enum`
-        case `actor`
-        case `protocol`
-        case `extension`
-        case `case`
-        case property
-        case `typealias`
-        case function
-        case method
-        case text
-        case webpage
-        case other
-    }
-    
-    public enum Status: String, Codable {
-        case included, blocked, notfound, empty
-    }
-
-    public var uri: String
-    public var status: Status?
-    @FallbackDecoding<ReferenceKindFallback>
-    public var kind: Kind
-    
-    public var ext: String {
-        return url?.pathExtension ?? ""
-    }
-    
-    public var fileName: String {
-        return url?.lastPathComponent ?? ""
-    }
-    
-    public var filePath: String {
-        return url?.path ?? ""
-    }
-    
-    public var url: URL? {
-        return URL(string: uri)
-    }
-
-    public init(
-        uri: String,
-        status: Status?,
-        kind: Kind
-    ) {
-        self.uri = uri
-        self.status = status
-        self.kind = kind
-        
-    }
-}
-
-extension ConversationReference {
-    public func getPathRelativeToHome() -> String {
-        guard !filePath.isEmpty else { return filePath}
-        
-        let homeDirectory = FileManager.default.homeDirectoryForCurrentUser.path
-        if !homeDirectory.isEmpty{
-            return filePath.replacingOccurrences(of: homeDirectory, with: "~")
-        }
-        
-        return filePath
-    }
-}
-
-public struct ReferenceKindFallback: FallbackValueProvider {
-    public static var defaultValue: ConversationReference.Kind { .other }
-}
 
 public struct ConversationFollowUp: Codable, Equatable {
     public var message: String
@@ -202,29 +164,70 @@ public struct ConversationFollowUp: Codable, Equatable {
     }
 }
 
-public struct ChatTemplate: Codable, Equatable {
-    public var id: String
-    public var description: String
-    public var shortDescription: String
-    public var scopes: [ChatPromptTemplateScope]
+public struct ConversationProgressStep: Codable, Equatable, Identifiable {
+    public enum StepStatus: String, Codable {
+        case running, completed, failed, cancelled
+    }
     
-    public init(id: String, description: String, shortDescription: String, scopes: [ChatPromptTemplateScope]=[]) {
+    public struct StepError: Codable, Equatable {
+        public let message: String
+    }
+    
+    public let id: String
+    public let title: String
+    public let description: String?
+    public var status: StepStatus
+    public let error: StepError?
+    
+    public init(id: String, title: String, description: String?, status: StepStatus, error: StepError?) {
         self.id = id
+        self.title = title
         self.description = description
-        self.shortDescription = shortDescription
-        self.scopes = scopes
+        self.status = status
+        self.error = error
     }
 }
 
-public enum ChatPromptTemplateScope: String, Codable, Equatable {
-    case chatPanel = "chat-panel"
-    case editor = "editor"
-    case inline = "inline"
+public struct DidChangeWatchedFilesEvent: Codable {
+    public var workspaceUri: String
+    public var changes: [FileEvent]
+    
+    public init(workspaceUri: String, changes: [FileEvent]) {
+        self.workspaceUri = workspaceUri
+        self.changes = changes
+    }
 }
 
-public struct CopilotLanguageServerError: Codable {
-    public var code: Int?
-    public var message: String
-    public var responseIsIncomplete: Bool?
-    public var responseIsFiltered: Bool?
+public struct AgentRound: Codable, Equatable {
+    public let roundId: Int
+    public var reply: String
+    public var toolCalls: [AgentToolCall]?
+    
+    public init(roundId: Int, reply: String, toolCalls: [AgentToolCall]? = []) {
+        self.roundId = roundId
+        self.reply = reply
+        self.toolCalls = toolCalls
+    }
+}
+
+public struct AgentToolCall: Codable, Equatable, Identifiable {
+    public let id: String
+    public let name: String
+    public var progressMessage: String?
+    public var status: ToolCallStatus
+    public var error: String?
+    public var invokeParams: InvokeClientToolParams?
+    
+    public enum ToolCallStatus: String, Codable {
+        case waitForConfirmation, accepted, running, completed, error, cancelled
+    }
+
+    public init(id: String, name: String, progressMessage: String? = nil, status: ToolCallStatus, error: String? = nil, invokeParams: InvokeClientToolParams? = nil) {
+        self.id = id
+        self.name = name
+        self.progressMessage = progressMessage
+        self.status = status
+        self.error = error
+        self.invokeParams = invokeParams
+    }
 }
